@@ -789,6 +789,7 @@ droidcore: files \
 	$(INSTALLED_RECOVERYIMAGE_TARGET) \
 	$(INSTALLED_USERDATAIMAGE_TARGET) \
 	$(INSTALLED_CACHEIMAGE_TARGET) \
+	$(INSTALLED_AMLOGIC_RECOVERY_TARGET) \
 	$(INSTALLED_FILES_FILE)
 
 # dist_files only for putting your library into the dist directory with a full build.
@@ -913,6 +914,12 @@ modules:
 	@echo "Available sub-modules:"
 	@echo "$(call module-names-for-tag-list,$(ALL_MODULE_TAGS))" | \
 	      tr -s ' ' '\n' | sort -u | $(COLUMN)
+
+.PHONY: modules-to-install
+modules-to-install:
+	@echo "Sub-Modules to install:"
+	@echo "$(call module-to-install-list,$(modules_to_install))" | \
+		tr -s ' ' '\n' | sort -u | $(COLUMN)
 
 .PHONY: showcommands
 showcommands:

@@ -100,6 +100,9 @@ FRAMEWORKS_BASE_SUBDIRS := \
 	    voip \
 	 )
 
+	    #ethernet \
+	    pppoe \
+
 #
 # A version of FRAMEWORKS_BASE_SUBDIRS that is expanded to full paths from
 # the root of the tree.  This currently needs to be here so that other libraries

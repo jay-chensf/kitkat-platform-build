@@ -1,0 +1,526 @@
+#!/usr/bin/env python
+#
+# aml_update_packer
+#
+# Copyright (C) 2010 Frank.Chen@amlogic.com
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+
+
+"""
+Given a target-files directory, generate an update package that installs
+that build. It will auto add update script and sign.
+
+If your want update some files in system, it would be helpful
+Any bugs, contact me with Frank.Chen@amlogic.com
+
+Usage:  aml_update_packer [flags] input_target_files_dir output_update_package
+
+  -k  (--package_key)  <key>
+      Key to use to sign the package
+      (default is $(ANDROID_BUILD_TOP)"/build/target/product/security/testkey").
+
+  -w  (--wipe_user_data)
+      Generate an OTA package that will wipe the user data partition
+      when installed.
+
+  -u  (--updater_path)  <path>
+      Updater binary location.
+      (default is $(ANDROID_PRODUCT_OUT)"/system/bin")
+
+  -c  (--files_config_path)  <path>
+      Filesystem_config contains file uid&pid&mode config, use this to auto set
+      file attribute after copy. If you add new file which no infomation in the file,
+      Add it by hand.
+      (default is $(ANDROID_PRODUCT_OUT)"/obj/PACKAGING/target_files_intermediates/"$(TARGET_PRODUCT)"-target_files-eng"."$(USER)).
+
+  -p  (--path)  <path>
+      Search path for host tools
+      (default is $(ANDROID_BUILD_TOP)/out/host/linux-x86/).
+
+  aml_update_packer need -k, -u, -c, and -p, but if you run . build/envsetup.sh and lunch your product in android root dir.
+  It can find default value.
+
+  example:
+     In android source root.
+     . build/envsetup.sh
+     lunch m1ref-eng
+     cd out/target/product/m1ref
+     mkdir -p inputdir/SYSTEM/bin
+     cp system/bin/vold inputdir/SYSTEM/bin/vold
+     ../../../../build/tools/releasetools/aml_update_packer inputdir patch.zip
+
+    inputdir may contain any of these (case-sensitive!):
+        SYSTEM/
+        LOGO/{aml_logo,logo}
+        BOOT/kernel
+        RECOVERY/kernel
+"""
+
+import sys
+
+if sys.hexversion < 0x02040000:
+  print >> sys.stderr, "Python 2.4 or newer is required."
+  sys.exit(1)
+
+import copy
+import errno
+import os
+import re
+import sha
+import subprocess
+import tempfile
+import time
+import zipfile
+
+import common
+import edify_generator
+
+OPTIONS = common.OPTIONS
+OPTIONS.wipe_user_data = False
+OPTIONS.files_config_path = None
+OPTIONS.package_key = None
+OPTIONS.updater_path = None
+
+
+def MostPopularKey(d, default):
+  """Given a dict, return the key corresponding to the largest
+  value.  Returns 'default' if the dict is empty."""
+  x = [(v, k) for (k, v) in d.iteritems()]
+  if not x: return default
+  x.sort()
+  return x[-1][1]
+
+
+class Item:
+  """Items represent the metadata (user, group, mode) of files and
+  directories in the system image."""
+  ITEMS = {}
+  def __init__(self, name, dir=False):
+    self.name = name
+    self.uid = None
+    self.gid = None
+    self.mode = None
+    self.dir = dir
+
+    if name:
+      self.parent = Item.Get(os.path.dirname(name), dir=True)
+      self.parent.children.append(self)
+    else:
+      self.parent = None
+    if dir:
+      self.children = []
+
+  def Dump(self, indent=0):
+    if self.uid is not None:
+      print "%s%s %d %d %o" % ("  "*indent, self.name, self.uid, self.gid, self.mode)
+    else:
+      print "%s%s %s %s %s" % ("  "*indent, self.name, self.uid, self.gid, self.mode)
+    if self.dir:
+      print "%s%s" % ("  "*indent, self.descendants)
+      print "%s%s" % ("  "*indent, self.best_subtree)
+      for i in self.children:
+        i.Dump(indent=indent+1)
+
+  @classmethod
+  def Get(cls, name, dir=False):
+    if name not in cls.ITEMS:
+      cls.ITEMS[name] = Item(name, dir=dir)
+    return cls.ITEMS[name]
+
+  @classmethod
+  def GetMetadata(cls, files_config_path, script):
+    try:
+      # See if the target_files contains a record of what the uid,
+      # gid, and mode is supposed to be.
+      file = open(files_config_path, "r")
+      output = file.read()
+      file.close()
+    except KeyError:
+      # Run the external 'fs_config' program to determine the desired
+      # uid, gid, and mode for every Item object.  Note this uses the
+      # one in the client now, which might not be the same as the one
+      # used when this target_files was built.
+      p = common.Run(["fs_config"], stdin=subprocess.PIPE,
+                     stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+      suffix = { False: "", True: "/" }
+      input = "".join(["%s%s\n" % (i.name, suffix[i.dir])
+                       for i in cls.ITEMS.itervalues() if i.name])
+      output, error = p.communicate(input)
+      assert not error
+
+    for line in output.split("\n"):
+      if not line: continue
+      name, uid, gid, mode = line.split()
+      i = cls.ITEMS.get(name, None)
+      if i is not None:
+        i.uid = int(uid)
+        i.gid = int(gid)
+        i.mode = int(mode, 8)
+        script.SetPermissions("/"+i.name, i.uid, i.gid, i.mode)
+        #if i.dir:
+        #  i.children.sort(key=lambda i: i.name)
+
+    # set metadata for the files generated by this script.
+    i = cls.ITEMS.get("system/recovery-from-boot.p", None)
+    if i: i.uid, i.gid, i.mode = 0, 0, 0644
+    i = cls.ITEMS.get("system/etc/install-recovery.sh", None)
+    if i: i.uid, i.gid, i.mode = 0, 0, 0544
+
+
+  def CountChildMetadata(self):
+    """Count up the (uid, gid, mode) tuples for all children and
+    determine the best strategy for using set_perm_recursive and
+    set_perm to correctly chown/chmod all the files to their desired
+    values.  Recursively calls itself for all descendants.
+
+    Returns a dict of {(uid, gid, dmode, fmode): count} counting up
+    all descendants of this node.  (dmode or fmode may be None.)  Also
+    sets the best_subtree of each directory Item to the (uid, gid,
+    dmode, fmode) tuple that will match the most descendants of that
+    Item.
+    """
+
+    assert self.dir
+    d = self.descendants = {(self.uid, self.gid, self.mode, None): 1}
+    for i in self.children:
+      if i.dir:
+        for k, v in i.CountChildMetadata().iteritems():
+          d[k] = d.get(k, 0) + v
+      else:
+        k = (i.uid, i.gid, None, i.mode)
+        d[k] = d.get(k, 0) + 1
+
+    # Find the (uid, gid, dmode, fmode) tuple that matches the most
+    # descendants.
+
+    # First, find the (uid, gid) pair that matches the most
+    # descendants.
+    ug = {}
+    for (uid, gid, _, _), count in d.iteritems():
+      if uid is not None and gid is not None:
+        ug[(uid, gid)] = ug.get((uid, gid), 0) + count
+    ug = MostPopularKey(ug, (0, 0))
+
+    # Now find the dmode and fmode that match the most descendants
+    # with that (uid, gid), and choose those.
+    best_dmode = (0, 0755)
+    best_fmode = (0, 0644)
+    for k, count in d.iteritems():
+      if k[:2] != ug: continue
+      if k[2] is not None and count >= best_dmode[0]: best_dmode = (count, k[2])
+      if k[3] is not None and count >= best_fmode[0]: best_fmode = (count, k[3])
+    self.best_subtree = ug + (best_dmode[1], best_fmode[1])
+
+    return d
+
+  def SetPermissions(self, script):
+    """Append set_perm/set_perm_recursive commands to 'script' to
+    set all permissions, users, and groups for the tree of files
+    rooted at 'self'."""
+
+    self.CountChildMetadata()
+
+    def recurse(item, current):
+      # current is the (uid, gid, dmode, fmode) tuple that the current
+      # item (and all its children) have already been set to.  We only
+      # need to issue set_perm/set_perm_recursive commands if we're
+      # supposed to be something different.
+      if item.dir:
+        if current != item.best_subtree:
+          script.SetPermissionsRecursive("/"+item.name, *item.best_subtree)
+          current = item.best_subtree
+
+        if item.uid != current[0] or item.gid != current[1] or \
+           item.mode != current[2]:
+          if item.uid is not None and item.gid is not None:
+            script.SetPermissions("/"+item.name, item.uid, item.gid, item.mode)
+
+        for i in item.children:
+          recurse(i, current)
+      else:
+        if item.uid != current[0] or item.gid != current[1] or \
+               item.mode != current[3]:
+          script.SetPermissions("/"+item.name, item.uid, item.gid, item.mode)
+
+    recurse(self, (-1, -1, -1, -1))
+
+
+def CopySystemFiles(input_dir, output_zip=None,
+                    substitute=None):
+  """Copies files underneath system/ in the input zip to the output
+  zip.  Populates the Item class with their metadata, and returns a
+  list of symlinks.  output_zip may be None, in which case the copy is
+  skipped (but the other side effects still happen).  substitute is an
+  optional dict of {output filename: contents} to be output instead of
+  certain input files.
+  """
+
+  symlinks = []
+  if os.path.exists(input_dir+"/SYSTEM") == False:
+    if os.path.exists(input_dir + "/system"):
+      print "WARNING: renaming " + input_dir + "/system to " + input_dir + "/SYSTEM"
+      os.rename(input_dir + "/system", input_dir + "/SYSTEM");
+    else:
+      print "WARNING: " + input_dir + "/SYSTEM does not exist. no system files will be copied"
+      return None
+
+  for parent, dirnames, filenames in os.walk(input_dir):
+    for dirname in dirnames:
+      fulldirname = parent + "/"+dirname
+      pos = fulldirname.find("SYSTEM/")
+      if pos > 0:
+        basefilename = fulldirname[pos+7:]
+        if os.path.islink(fulldirname):
+          linkname = os.path.realpath(fulldirname)
+          symlinks.append((os.path.basename(linkname), "/system/" + basefilename))
+        else:
+          fn = "system/" + basefilename
+          if output_zip is not None:
+            output_zip.write(fulldirname, fn)
+          Item.Get(fn[:-1], dir=True)
+    for filename in filenames:
+      fullfilename = parent + "/"+filename
+      pos = fullfilename.find("SYSTEM/")
+      if pos > 0:
+        basefilename = fullfilename[pos+7:]
+        if os.path.islink(fullfilename):
+          linkname = os.path.realpath(fullfilename)
+          symlinks.append((os.path.basename(linkname), "/system/" + basefilename))
+        else:
+          fn = "system/" + basefilename
+          if output_zip is not None:
+            output_zip.write(fullfilename, fn)
+          Item.Get(fn, dir=False)
+  symlinks.sort()
+  return symlinks
+
+def CopyFirmwareFiles(input_dir, output_zip, script):
+  if os.path.exists(input_dir+"/LOGO/aml_logo"):
+    f = open(input_dir+"/LOGO/aml_logo", 'r')
+    common.ZipWriteStr(output_zip, "aml_logo.img", f.read())
+    script.WriteRawImage("/aml_logo", "aml_logo.img")
+    f.close()
+  else:
+    print 'WARNING: Did not find aml_logo'
+
+  if os.path.exists(input_dir+"/LOGO/logo"):
+    f = open(input_dir+"/LOGO/logo", 'r')
+
+    common.ZipWriteStr(output_zip, "logo.img", f.read())
+
+    script.WriteRawImage("/logo", "logo.img")
+    f.close()
+  else:
+    print 'WARNING: Did not find logo'
+
+def SignOutput(temp_zip_name, output_zip_name):
+  key_passwords = common.GetKeyPasswords([OPTIONS.package_key])
+  pw = key_passwords[OPTIONS.package_key]
+
+  common.SignFile(temp_zip_name, output_zip_name, OPTIONS.package_key, pw,
+                  whole_file=True)
+
+def MakeRecoveryPatch(output_zip, recovery_img, boot_img):
+  """Generate a binary patch that creates the recovery image starting
+  with the boot image.  (Most of the space in these images is just the
+  kernel, which is identical for the two, so the resulting patch
+  should be efficient.)  Add it to the output zip, along with a shell
+  script that is run from init.rc on first boot to actually do the
+  patching and install the new recovery image.
+
+  recovery_img and boot_img should be File objects for the
+  corresponding images.
+
+  Returns an Item for the shell script, which must be made
+  executable.
+  """
+
+  d = common.Difference(recovery_img, boot_img)
+  _, _, patch = d.ComputePatch()
+  common.ZipWriteStr(output_zip, "recovery/recovery-from-boot.p", patch)
+  Item.Get("system/recovery-from-boot.p", dir=False)
+
+  boot_type, boot_device = common.GetTypeAndDevice("/boot", OPTIONS.info_dict)
+  recovery_type, recovery_device = common.GetTypeAndDevice("/recovery", OPTIONS.info_dict)
+
+  # Images with different content will have a different first page, so
+  # we check to see if this recovery has already been installed by
+  # testing just the first 2k.
+  HEADER_SIZE = 2048
+  header_sha1 = sha.sha(recovery_img.data[:HEADER_SIZE]).hexdigest()
+  sh = """#!/system/bin/sh
+if ! applypatch -c %(recovery_type)s:%(recovery_device)s:%(header_size)d:%(header_sha1)s; then
+  log -t recovery "Installing new recovery image"
+  applypatch %(boot_type)s:%(boot_device)s:%(boot_size)d:%(boot_sha1)s %(recovery_type)s:%(recovery_device)s %(recovery_sha1)s %(recovery_size)d %(boot_sha1)s:/system/recovery-from-boot.p
+else
+  log -t recovery "Recovery image already installed"
+fi
+""" % { 'boot_size': boot_img.size,
+        'boot_sha1': boot_img.sha1,
+        'header_size': HEADER_SIZE,
+        'header_sha1': header_sha1,
+        'recovery_size': recovery_img.size,
+        'recovery_sha1': recovery_img.sha1,
+        'boot_type': boot_type,
+        'boot_device': boot_device,
+        'recovery_type': recovery_type,
+        'recovery_device': recovery_device,
+        }
+  common.ZipWriteStr(output_zip, "recovery/etc/install-recovery.sh", sh)
+  return Item.Get("system/etc/install-recovery.sh", dir=False)
+
+
+def WriteFullOTAPackage(input_dir, output_zip, update_path, files_config_path):
+  script = edify_generator.EdifyGenerator(3, OPTIONS.info_dict)
+
+  script.ShowProgress(0.5, 0)
+
+  if OPTIONS.wipe_user_data:
+    script.FormatPartition("/data")
+
+  symlinks = CopySystemFiles(input_dir, output_zip)
+  if symlinks != None:
+      script.Mount("/system")
+      script.UnpackPackageDir("recovery", "/system")
+      script.UnpackPackageDir("system", "/system")
+
+      script.MakeSymlinks(symlinks)
+
+  CopyFirmwareFiles(input_dir, output_zip, script)
+  # In Amlogic recovery and update subsystem, it use ramfs which complie into uImage
+
+  if os.path.exists(input_dir+"/BOOT/kernel"):
+    f_boot = open(input_dir+"/BOOT/kernel", 'r')
+    common.ZipWriteStr(output_zip, "boot.img", f_boot.read())
+    script.ShowProgress(0.2, 0)
+    script.WriteRawImage("/boot", "boot.img")
+    f_boot.close()
+    if os.path.exists(input_dir+"/RECOVERY/kernel"):
+      f_boot = open(input_dir+"/BOOT/kernel", 'r')
+      f_recovery = open(input_dir+"/RECOVERY/kernel", 'r')
+      boot_img = common.File("boot.img", f_boot.read())
+      recovery_img = common.File("recovery.img", f_recovery.read())
+      MakeRecoveryPatch(output_zip, recovery_img, boot_img)
+      f_boot.close()
+      f_recovery.close()
+    else:
+      print 'WARNING: Did not find RECOVERY'
+
+  else:
+    print 'WARNING: Did not find BOOT'
+
+  script.ShowProgress(0.2, 10)
+
+  if files_config_path is not None:
+    Item.GetMetadata(files_config_path, script)
+    #Item.Get("system").SetPermissions(script)
+
+  script.ShowProgress(0.1, 0)
+
+  script.UnmountAll()
+  script.AddToZip("", output_zip, update_path)
+
+def main(argv):
+
+  def option_handler(o, a):
+    if o in ("-k", "--package_key"):
+      OPTIONS.package_key = a
+    elif o in ("-w", "--wipe_user_data"):
+      OPTIONS.wipe_user_data = True
+    elif o in ("-u", "--updater_path"):
+      OPTIONS.updater_path = a
+    elif o in ("-c", "--files_config_path"):
+      OPTIONS.files_config_path = a
+    else:
+      return False
+    return True
+
+  args = common.ParseOptions(argv, __doc__,
+                             extra_opts="k:wu:c:",
+                             extra_long_opts=["package_key=",
+                                              "wipe_user_data",
+                                              "updater_path=",
+                                              "files_config_path="],
+                             extra_option_handler=option_handler)
+
+  if len(args) != 2:
+    common.Usage(__doc__)
+    sys.exit(1)
+
+  android_product_out = os.environ.get('ANDROID_PRODUCT_OUT')
+  android_build_top = os.environ.get('ANDROID_BUILD_TOP')
+  target_product = os.environ.get('TARGET_PRODUCT')
+  user = os.environ.get('USER')
+
+  print "environment variables:"
+  print "  android_product_out: " + android_product_out
+  print "  android_build_top: " + android_build_top
+  print "  target_product: " + target_product
+  print "  user: " + user
+
+  target_files_zip_path = android_product_out + "/obj/PACKAGING/target_files_intermediates/" + \
+        target_product + "-target_files-eng." + user + ".zip"
+  if os.path.exists(target_files_zip_path) == False:
+    print "ERROR: can't find target files zip. need to have made otapackage first"
+    sys.exit(1);
+  target_files_zip = zipfile.ZipFile(target_files_zip_path, "r")
+  OPTIONS.info_dict = common.LoadInfoDict(target_files_zip)
+  if OPTIONS.verbose:
+    print "--- target info ---"
+    common.DumpInfoDict(OPTIONS.info_dict)
+
+  if OPTIONS.package_key is None:
+    OPTIONS.package_key = android_build_top+"/build/target/product/security/testkey"
+
+  if OPTIONS.updater_path is None:
+    OPTIONS.updater_path = android_product_out+"/system/bin/"
+  if os.path.exists(OPTIONS.updater_path + "/updater") == False:
+    print "ERROR: can't find " + OPTIONS.updater_path + "/updater. try cd $T/bootable/recovery && mm"
+    sys.exit(1);
+
+  if android_build_top is not None and cmp(OPTIONS.search_path,"/out/host/linux-x86/"):
+    OPTIONS.search_path = android_build_top+"/out/host/linux-x86/"
+
+  input_dir = args[0]
+
+  if OPTIONS.files_config_path is None:
+    filename = os.path.join(input_dir, "META/filesystem_config.txt")
+    if os.path.exists(filename):
+      OPTIONS.files_config_path = filename
+    else:
+      tmpname = android_product_out + "/obj/PACKAGING/target_files_intermediates/" + \
+            target_product + "-target_files-eng." + user + "/META/filesystem_config.txt"
+      if os.path.exists(tmpname):
+        OPTIONS.files_config_path = tmpname
+
+  if OPTIONS.package_key:
+    temp_zip_file = tempfile.NamedTemporaryFile()
+    output_zip = zipfile.ZipFile(temp_zip_file, "w",
+                                 compression=zipfile.ZIP_DEFLATED)
+  else:
+    output_zip = zipfile.ZipFile(args[1], "w",compression=zipfile.ZIP_DEFLATED)
+
+  WriteFullOTAPackage(input_dir, output_zip, OPTIONS.updater_path, OPTIONS.files_config_path)
+
+  output_zip.close()
+  if OPTIONS.package_key:
+    SignOutput(temp_zip_file.name, args[1])
+    temp_zip_file.close()
+
+  common.Cleanup()
+
+  print "done."
+
+
+if __name__ == '__main__':
+  try:
+    main(sys.argv[1:])
+  except common.ExternalError, e:
+    print
+    print "   ERROR: %s" % (e,)
+    print
+    sys.exit(1)

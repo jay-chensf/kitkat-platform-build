@@ -360,7 +360,7 @@ BUILT_RAMDISK_TARGET := $(PRODUCT_OUT)/ramdisk.img
 
 # We just build this directly to the install location.
 INSTALLED_RAMDISK_TARGET := $(BUILT_RAMDISK_TARGET)
-$(INSTALLED_RAMDISK_TARGET): $(MKBOOTFS) $(INTERNAL_RAMDISK_FILES) | $(MINIGZIP)
+$(INSTALLED_RAMDISK_TARGET): $(INSTALLED_KERNEL_TARGET) $(MKBOOTFS) $(INTERNAL_RAMDISK_FILES) | $(MINIGZIP)
 	$(call pretty,"Target ram disk: $@")
 	$(hide) $(MKBOOTFS) $(TARGET_ROOT_OUT) | $(MINIGZIP) > $@
 
@@ -574,6 +574,11 @@ $(if $(mkyaffs2_extra_flags),$(hide) echo "mkyaffs2_extra_flags=$(mkyaffs2_extra
 $(if $(filter true, $(strip $(HAVE_SELINUX))), echo "selinux_fc=$(TARGET_ROOT_OUT)/file_contexts" >> $(1))
 endef
 
+recovery_fstab := $(strip $(wildcard $(TARGET_DEVICE_DIR)/recovery/recovery.fstab))
+ifeq ($(recovery_fstab),)
+  $(info No recovery.fstab for TARGET_DEVICE $(TARGET_DEVICE))
+endif
+
 # -----------------------------------------------------------------
 # Recovery image
 
@@ -583,6 +588,23 @@ ifeq (,$(filter true, $(TARGET_NO_KERNEL) $(TARGET_NO_RECOVERY) $(BUILD_TINY_AND
 INSTALLED_RECOVERYIMAGE_TARGET := $(PRODUCT_OUT)/recovery.img
 
 recovery_initrc := $(call include-path-for, recovery)/etc/init.rc
+custom_recovery_initrc := $(strip $(wildcard $(TARGET_DEVICE_DIR)/recovery/init.rc))
+ifneq ($(custom_recovery_initrc),)
+	recovery_initrc := $(custom_recovery_initrc)
+endif
+
+open_mass_storage := $(call include-path-for, recovery)/etc/open_mass_storage.sh
+custom_open_mass_storage := $(strip $(wildcard $(TARGET_DEVICE_DIR)/recovery/open_mass_storage.sh))
+ifneq ($(custom_open_mass_storage),)
+	open_mass_storage := $(custom_open_mass_storage)
+endif
+
+recovery_sh := $(TARGET_OUT)/bin/sh
+custom_recovery_sh := $(strip $(wildcard $(TARGET_DEVICE_DIR)/recovery/sh))
+ifneq ($(custom_recovery_sh),)
+	recovery_sh := $(custom_recovery_sh)
+endif
+
 recovery_kernel := $(INSTALLED_KERNEL_TARGET) # same as a non-recovery system
 recovery_ramdisk := $(PRODUCT_OUT)/ramdisk-recovery.img
 recovery_build_prop := $(INSTALLED_BUILD_PROP_TARGET)
@@ -591,7 +613,32 @@ recovery_resources_common := $(call include-path-for, recovery)/res
 recovery_resources_private := $(strip $(wildcard $(TARGET_DEVICE_DIR)/recovery/res))
 recovery_resource_deps := $(shell find $(recovery_resources_common) \
   $(recovery_resources_private) -type f)
-recovery_fstab := $(strip $(wildcard $(TARGET_DEVICE_DIR)/recovery.fstab))
+
+recovery_kl := $(strip $(wildcard $(TARGET_DEVICE_DIR)/recovery/recovery.kl))
+
+set_display_mode := $(strip $(wildcard $(TARGET_DEVICE_DIR)/recovery/set_display_mode.sh))
+ifeq ($(set_display_mode),)
+	set_display_mode := $(strip $(wildcard $(TARGET_DEVICE_DIR)/set_display_mode.sh))
+endif
+
+fw_env_config := $(strip $(wildcard $(TARGET_DEVICE_DIR)/recovery/fw_env.config))
+fw_env_binary := $(strip $(wildcard $(TARGET_OUT)/bin/fw_printenv))
+
+ifeq ($(fw_env_config),)
+	fw_env_config := $(strip $(wildcard external/fw_env/fw_env.config))
+endif
+
+recovery_fdisk_media := $(strip $(wildcard $(TARGET_DEVICE_DIR)/recovery/fdisk.media.sh))
+recovery_fdisk_media_cmd := $(strip $(wildcard $(TARGET_DEVICE_DIR)/recovery/fdisk.media.cmd))
+
+ifeq ($(recovery_fdisk_media),)
+  recovery_fdisk_media := $(strip $(wildcard $(TARGET_DEVICE_DIR)/../common/recovery/fdisk.media.sh))
+endif
+
+ifeq ($(recovery_fdisk_media_cmd),)
+  recovery_fdisk_media_cmd := $(strip $(wildcard $(TARGET_DEVICE_DIR)/../common/recovery/fdisk.media.cmd))
+endif
+
 # Named '.dat' so we don't attempt to use imgdiff for patching it.
 RECOVERY_RESOURCE_ZIP := $(TARGET_OUT)/etc/recovery-resource.dat
 
@@ -599,9 +646,16 @@ ifeq ($(recovery_resources_private),)
   $(info No private recovery resources for TARGET_DEVICE $(TARGET_DEVICE))
 endif
 
-ifeq ($(recovery_fstab),)
-  $(info No recovery.fstab for TARGET_DEVICE $(TARGET_DEVICE))
+
+#recovery_busybox := $(call include-path-for, recovery)/bin/busybox
+recovery_busybox := $(PRODUCT_OUT)/utilities/busybox
+custom_recovery_busybox := $(strip $(wildcard $(TARGET_DEVICE_DIR)/recovery/busybox))
+ifneq ($(custom_recovery_busybox),)
+recovery_busybox := $(custom_recovery_busybox)
 endif
+
+recovery_remote := $(strip $(wildcard $(TARGET_DEVICE_DIR)/recovery/remotecfg))
+recovery_remote_conf := $(strip $(wildcard $(TARGET_DEVICE_DIR)/recovery/remote.conf))
 
 INTERNAL_RECOVERYIMAGE_ARGS := \
 	$(addprefix --second ,$(INSTALLED_2NDBOOTLOADER_TARGET)) \
@@ -623,15 +677,20 @@ endif
 # Keys authorized to sign OTA packages this build will accept.  The
 # build always uses dev-keys for this; release packaging tools will
 # substitute other keys for this one.
-OTA_PUBLIC_KEYS := $(DEFAULT_SYSTEM_DEV_CERTIFICATE).x509.pem
+ifeq ($(BUILD_SECURE),true)
+	OTA_PUBLIC_KEYS := device/*/$(TARGET_DEVICE)/releasekey.x509.pem
+else
+	OTA_PUBLIC_KEYS := $(SRC_TARGET_DIR)/product/security/testkey.x509.pem
+endif
 
 # Generate a file containing the keys that will be read by the
 # recovery binary.
 RECOVERY_INSTALL_OTA_KEYS := \
 	$(call intermediates-dir-for,PACKAGING,ota_keys)/keys
 DUMPKEY_JAR := $(HOST_OUT_JAVA_LIBRARIES)/dumpkey.jar
+PREV_BUILD_CONFIG := $(PRODUCT_OUT)/previous_build_config.mk
 $(RECOVERY_INSTALL_OTA_KEYS): PRIVATE_OTA_PUBLIC_KEYS := $(OTA_PUBLIC_KEYS)
-$(RECOVERY_INSTALL_OTA_KEYS): extra_keys := $(patsubst %,%.x509.pem,$(PRODUCT_EXTRA_RECOVERY_KEYS))
+#$(RECOVERY_INSTALL_OTA_KEYS): extra_keys := $(patsubst %,%.x509.pem,$(PRODUCT_EXTRA_RECOVERY_KEYS))
 $(RECOVERY_INSTALL_OTA_KEYS): $(OTA_PUBLIC_KEYS) $(DUMPKEY_JAR) $(extra_keys)
 	@echo "DumpPublicKey: $@ <= $(PRIVATE_OTA_PUBLIC_KEYS) $(extra_keys)"
 	@rm -rf $@
@@ -646,25 +705,68 @@ $(INSTALLED_RECOVERYIMAGE_TARGET): $(MKBOOTFS) $(MKBOOTIMG) $(MINIGZIP) \
 		$(INSTALLED_2NDBOOTLOADER_TARGET) \
 		$(recovery_build_prop) $(recovery_resource_deps) \
 		$(recovery_fstab) \
-		$(RECOVERY_INSTALL_OTA_KEYS)
+		$(RECOVERY_INSTALL_OTA_KEYS) \
+		$(recovery_busybox) \
+		$(recovery_sh)		
 	@echo ----- Making recovery image ------
 	$(hide) rm -rf $(TARGET_RECOVERY_OUT)
 	$(hide) mkdir -p $(TARGET_RECOVERY_OUT)
 	$(hide) mkdir -p $(TARGET_RECOVERY_ROOT_OUT)/etc $(TARGET_RECOVERY_ROOT_OUT)/tmp
 	@echo Copying baseline ramdisk...
 	$(hide) cp -R $(TARGET_ROOT_OUT) $(TARGET_RECOVERY_OUT)
+ifeq ($(TARGET_RECOVERY_NO_ADBD),true)
+	rm -f $(TARGET_RECOVERY_ROOT_OUT)/sbin/adbd
+endif
+ifeq ($(TARGET_RECOVERY_NO_MALI),true)
+	rm -f $(TARGET_RECOVERY_ROOT_OUT)/boot/mali.ko
+	rm -f $(TARGET_RECOVERY_ROOT_OUT)/boot/ump.ko
+endif	
 	@echo Modifying ramdisk contents...
 	$(hide) rm -f $(TARGET_RECOVERY_ROOT_OUT)/init*.rc
 	$(hide) cp -f $(recovery_initrc) $(TARGET_RECOVERY_ROOT_OUT)/
 	$(hide) -cp $(TARGET_ROOT_OUT)/init.recovery.*.rc $(TARGET_RECOVERY_ROOT_OUT)/
+	cp -f $(open_mass_storage) $(TARGET_RECOVERY_ROOT_OUT)/sbin/	
 	$(hide) cp -f $(recovery_binary) $(TARGET_RECOVERY_ROOT_OUT)/sbin/
 	$(hide) cp -rf $(recovery_resources_common) $(TARGET_RECOVERY_ROOT_OUT)/
 	$(hide) $(foreach item,$(recovery_resources_private), \
 	  cp -rf $(item) $(TARGET_RECOVERY_ROOT_OUT)/)
 	$(hide) $(foreach item,$(recovery_fstab), \
 	  cp -f $(item) $(TARGET_RECOVERY_ROOT_OUT)/etc/recovery.fstab)
-	$(hide) cp $(RECOVERY_INSTALL_OTA_KEYS) $(TARGET_RECOVERY_ROOT_OUT)/res/keys
-	$(hide) cat $(INSTALLED_DEFAULT_PROP_TARGET) $(recovery_build_prop) \
+ifneq ($(recovery_kl),)
+	cp -f $(recovery_kl) $(TARGET_RECOVERY_ROOT_OUT)/etc/recovery.kl
+endif
+ifneq ($(set_display_mode),)
+	cp -f $(set_display_mode) $(TARGET_RECOVERY_ROOT_OUT)/sbin/set_display_mode.sh
+endif
+ifneq ($(fw_env_binary),)
+	cp -f $(fw_env_binary) $(TARGET_OUT)/bin/fw_setenv
+	cp -f $(fw_env_binary) $(TARGET_RECOVERY_ROOT_OUT)/sbin/fw_printenv
+	cp -f $(fw_env_binary) $(TARGET_RECOVERY_ROOT_OUT)/sbin/fw_setenv
+endif
+ifneq ($(fw_env_config),)
+	cp -f $(fw_env_config) $(TARGET_OUT)/etc/fw_env.config
+	cp -f $(fw_env_config) $(TARGET_RECOVERY_ROOT_OUT)/etc/fw_env.config
+endif
+ifneq ($(recovery_fdisk_media),)
+	cp -f $(recovery_fdisk_media) $(TARGET_RECOVERY_ROOT_OUT)/sbin/
+endif
+ifneq ($(recovery_fdisk_media_cmd),)
+	cp -f $(recovery_fdisk_media_cmd) $(TARGET_RECOVERY_ROOT_OUT)/etc/
+endif
+ifneq ($(TARGET_RECOVERY_NO_BUSYBOX),true)
+	cp -f $(recovery_busybox) $(TARGET_RECOVERY_ROOT_OUT)/sbin/
+endif
+ifneq ($(recovery_remote),)
+	cp -f $(recovery_remote) $(TARGET_RECOVERY_ROOT_OUT)/sbin/
+endif
+ifneq ($(recovery_remote_conf),)
+	cp -f $(recovery_remote_conf) $(TARGET_RECOVERY_ROOT_OUT)/etc/
+endif
+ifneq ($(TARGET_RECOVERY_NO_SH),true)
+	cp -f $(recovery_sh) $(TARGET_RECOVERY_ROOT_OUT)/sbin/
+endif
+	cp $(RECOVERY_INSTALL_OTA_KEYS) $(TARGET_RECOVERY_ROOT_OUT)/res/keys
+	cat $(INSTALLED_DEFAULT_PROP_TARGET) $(recovery_build_prop) \
 	        > $(TARGET_RECOVERY_ROOT_OUT)/default.prop
 	$(hide) $(MKBOOTFS) $(TARGET_RECOVERY_ROOT_OUT) | $(MINIGZIP) > $(recovery_ramdisk)
 	$(hide) $(MKBOOTIMG) $(INTERNAL_RECOVERYIMAGE_ARGS) $(BOARD_MKBOOTIMG_ARGS) --output $@
@@ -683,12 +785,185 @@ endif
 .PHONY: recoveryimage
 recoveryimage: $(INSTALLED_RECOVERYIMAGE_TARGET) $(RECOVERY_RESOURCE_ZIP)
 
-ifneq ($(BOARD_NAND_PAGE_SIZE),)
-mkyaffs2_extra_flags := -c $(BOARD_NAND_PAGE_SIZE)
-else
-mkyaffs2_extra_flags :=
-BOARD_NAND_PAGE_SIZE := 2048
+# -----------------------------------------------------------------
+# Amlogic recovery image
+
+ifeq ($(TARGET_USE_AMLOGIC_RECOVERY),true)
+
+INSTALLED_AMLOGIC_RECOVERY_TARGET := $(PRODUCT_OUT)/ramdisk-recovery.img
+
+recovery_initrc := $(call include-path-for, recovery)/etc/init.rc
+custom_recovery_initrc := $(strip $(wildcard $(TARGET_DEVICE_DIR)/recovery/init.rc))
+ifneq ($(custom_recovery_initrc),)
+	recovery_initrc := $(custom_recovery_initrc)
 endif
+
+open_mass_storage := $(call include-path-for, recovery)/etc/open_mass_storage.sh
+custom_open_mass_storage := $(strip $(wildcard $(TARGET_DEVICE_DIR)/recovery/open_mass_storage.sh))
+ifneq ($(custom_open_mass_storage),)
+	open_mass_storage := $(custom_open_mass_storage)
+endif
+
+recovery_sh := $(TARGET_OUT)/bin/sh
+custom_recovery_sh := $(strip $(wildcard $(TARGET_DEVICE_DIR)/recovery/sh))
+ifneq ($(custom_recovery_sh),)
+	recovery_sh := $(custom_recovery_sh)
+endif
+
+recovery_kernel := $(INSTALLED_KERNEL_TARGET) # same as a non-recovery system
+recovery_build_prop := $(INSTALLED_BUILD_PROP_TARGET)
+recovery_binary := $(call intermediates-dir-for,EXECUTABLES,recovery)/recovery
+recovery_resources_common := $(call include-path-for, recovery)/res
+recovery_resources_private := $(strip $(wildcard $(TARGET_DEVICE_DIR)/recovery/res))
+recovery_resource_deps := $(shell find $(recovery_resources_common) \
+  $(recovery_resources_private) -type f)
+recovery_fstab := $(strip $(wildcard $(TARGET_DEVICE_DIR)/recovery/recovery.fstab))
+recovery_kl := $(strip $(wildcard $(TARGET_DEVICE_DIR)/recovery/recovery.kl))
+
+set_display_mode := $(strip $(wildcard $(TARGET_DEVICE_DIR)/recovery/set_display_mode.sh))
+ifeq ($(set_display_mode),)
+	set_display_mode := $(strip $(wildcard $(TARGET_DEVICE_DIR)/set_display_mode.sh))
+endif
+
+fw_env_config := $(strip $(wildcard $(TARGET_DEVICE_DIR)/recovery/fw_env.config))
+fw_env_binary := $(strip $(wildcard $(TARGET_OUT)/bin/fw_printenv))
+
+ifeq ($(fw_env_config),)
+	fw_env_config := $(strip $(wildcard external/fw_env/fw_env.config))
+endif
+
+recovery_fdisk_media := $(strip $(wildcard $(TARGET_DEVICE_DIR)/recovery/fdisk.media.sh))
+recovery_fdisk_media_cmd := $(strip $(wildcard $(TARGET_DEVICE_DIR)/recovery/fdisk.media.cmd))
+ifeq ($(recovery_fdisk_media),)
+  recovery_fdisk_media := $(strip $(wildcard $(TARGET_DEVICE_DIR)/../common/recovery/fdisk.media.sh))
+endif
+
+ifeq ($(recovery_fdisk_media_cmd),)
+  recovery_fdisk_media_cmd := $(strip $(wildcard $(TARGET_DEVICE_DIR)/../common/recovery/fdisk.media.cmd))
+endif
+
+ifeq ($(recovery_resources_private),)
+  $(info No private recovery resources for TARGET_DEVICE $(TARGET_DEVICE))
+endif
+
+ifeq ($(recovery_fstab),)
+  $(info No recovery.fstab for TARGET_DEVICE $(TARGET_DEVICE))
+endif
+
+#recovery_busybox := $(call include-path-for, recovery)/bin/busybox
+recovery_busybox := $(PRODUCT_OUT)/utilities/busybox
+custom_recovery_busybox := $(strip $(wildcard $(TARGET_DEVICE_DIR)/recovery/busybox))
+ifneq ($(custom_recovery_busybox),)
+  recovery_busybox := $(custom_recovery_busybox)
+endif
+
+recovery_remote := $(strip $(wildcard $(TARGET_DEVICE_DIR)/recovery/remotecfg))
+recovery_remote_conf := $(strip $(wildcard $(TARGET_DEVICE_DIR)/recovery/remote.conf))
+
+# Keys authorized to sign OTA packages this build will accept.  The
+# build always uses test-keys for this; release packaging tools will
+# substitute other keys for this one.
+
+ifeq ($(BUILD_SECURE),true)
+	OTA_PUBLIC_KEYS := device/*/$(TARGET_DEVICE)/releasekey.x509.pem
+else
+	OTA_PUBLIC_KEYS := $(SRC_TARGET_DIR)/product/security/testkey.x509.pem
+endif
+
+# Generate a file containing the keys that will be read by the
+# recovery binary.
+RECOVERY_INSTALL_OTA_KEYS := \
+        $(call intermediates-dir-for,PACKAGING,ota_keys)/keys
+DUMPKEY_JAR := $(HOST_OUT_JAVA_LIBRARIES)/dumpkey.jar
+PREV_BUILD_CONFIG := $(PRODUCT_OUT)/previous_build_config.mk
+$(RECOVERY_INSTALL_OTA_KEYS): PRIVATE_OTA_PUBLIC_KEYS := $(OTA_PUBLIC_KEYS)
+$(RECOVERY_INSTALL_OTA_KEYS): $(OTA_PUBLIC_KEYS) $(DUMPKEY_JAR) $(PREV_BUILD_CONFIG)
+	@echo "DumpPublicKey: $@ <= $(PRIVATE_OTA_PUBLIC_KEYS)"
+	@rm -rf $@
+	@mkdir -p $(dir $@)
+	java -jar $(DUMPKEY_JAR) $(PRIVATE_OTA_PUBLIC_KEYS) > $@
+
+$(INSTALLED_AMLOGIC_RECOVERY_TARGET): $(MKBOOTFS) $(MKBOOTIMG) $(MINIGZIP) \
+		$(INSTALLED_RAMDISK_TARGET) \
+		$(INSTALLED_BOOTIMAGE_TARGET) \
+		$(recovery_binary) \
+		$(recovery_initrc) $(recovery_kernel) \
+		$(INSTALLED_2NDBOOTLOADER_TARGET) \
+		$(recovery_build_prop) $(recovery_resource_deps) \
+		$(RECOVERY_INSTALL_OTA_KEYS) \
+		$(recovery_busybox) \
+		$(recovery_sh)
+	@echo ----- Making recovery image ------
+	rm -rf $(TARGET_RECOVERY_OUT)
+	mkdir -p $(TARGET_RECOVERY_OUT)
+	mkdir -p $(TARGET_RECOVERY_ROOT_OUT)
+	mkdir -p $(TARGET_RECOVERY_ROOT_OUT)/etc
+	mkdir -p $(TARGET_RECOVERY_ROOT_OUT)/tmp
+	echo Copying baseline ramdisk...
+	cp -R $(TARGET_ROOT_OUT) $(TARGET_RECOVERY_OUT)
+ifeq ($(TARGET_RECOVERY_NO_ADBD),true)
+	rm -f $(TARGET_RECOVERY_ROOT_OUT)/sbin/adbd
+endif
+ifeq ($(TARGET_RECOVERY_NO_MALI),true)
+	rm -f $(TARGET_RECOVERY_ROOT_OUT)/boot/mali.ko
+	rm -f $(TARGET_RECOVERY_ROOT_OUT)/boot/ump.ko
+endif
+	echo Modifying ramdisk contents...
+	cp -f $(recovery_initrc) $(TARGET_RECOVERY_ROOT_OUT)/
+	cp -f $(open_mass_storage) $(TARGET_RECOVERY_ROOT_OUT)/sbin/
+	cp -f $(recovery_binary) $(TARGET_RECOVERY_ROOT_OUT)/sbin/
+	cp -rf $(recovery_resources_common) $(TARGET_RECOVERY_ROOT_OUT)/
+	$(foreach item,$(recovery_resources_private), \
+          cp -rf $(item) $(TARGET_RECOVERY_ROOT_OUT)/)
+	$(foreach item,$(recovery_fstab), \
+          cp -f $(item) $(TARGET_RECOVERY_ROOT_OUT)/etc/recovery.fstab)
+ifneq ($(recovery_kl),)
+	cp -f $(recovery_kl) $(TARGET_RECOVERY_ROOT_OUT)/etc/recovery.kl
+endif
+ifneq ($(set_display_mode),)
+	cp -f $(set_display_mode) $(TARGET_RECOVERY_ROOT_OUT)/sbin/set_display_mode.sh
+endif
+ifneq ($(fw_env_binary),)
+	@echo $(fw_env_binary)
+	cp -f $(fw_env_binary) $(TARGET_OUT)/bin/fw_setenv
+	cp -f $(fw_env_binary) $(TARGET_RECOVERY_ROOT_OUT)/sbin/fw_printenv
+	cp -f $(fw_env_binary) $(TARGET_RECOVERY_ROOT_OUT)/sbin/fw_setenv
+endif
+ifneq ($(fw_env_config),)
+	cp -f $(fw_env_config) $(TARGET_OUT)/etc/fw_env.config
+	cp -f $(fw_env_config) $(TARGET_RECOVERY_ROOT_OUT)/etc/fw_env.config
+endif
+ifneq ($(recovery_fdisk_media),)
+	cp -f $(recovery_fdisk_media) $(TARGET_RECOVERY_ROOT_OUT)/sbin/
+endif
+ifneq ($(recovery_fdisk_media_cmd),)
+	cp -f $(recovery_fdisk_media_cmd) $(TARGET_RECOVERY_ROOT_OUT)/etc/
+endif
+
+ifneq ($(TARGET_RECOVERY_NO_BUSYBOX),true)
+	cp -f $(recovery_busybox) $(TARGET_RECOVERY_ROOT_OUT)/sbin/
+endif
+ifneq ($(recovery_remote),)
+	cp -f $(recovery_remote) $(TARGET_RECOVERY_ROOT_OUT)/sbin/
+endif
+ifneq ($(recovery_remote_conf),)
+	cp -f $(recovery_remote_conf) $(TARGET_RECOVERY_ROOT_OUT)/etc/
+endif
+	cp $(RECOVERY_INSTALL_OTA_KEYS) $(TARGET_RECOVERY_ROOT_OUT)/res/keys
+ifneq ($(TARGET_RECOVERY_NO_SH),true)
+	cp -f $(recovery_sh) $(TARGET_RECOVERY_ROOT_OUT)/sbin/
+endif
+	cat $(INSTALLED_DEFAULT_PROP_TARGET) $(recovery_build_prop) \
+		> $(TARGET_RECOVERY_ROOT_OUT)/default.prop
+	$(MKBOOTFS) $(TARGET_RECOVERY_ROOT_OUT) | $(MINIGZIP) > $(INSTALLED_AMLOGIC_RECOVERY_TARGET)
+	$(hide) $(call assert-max-image-size,$@,$(BOARD_RECOVERYIMAGE_PARTITION_SIZE),raw)
+	@echo ----- Made recovery image -------- $@
+else
+INSTALLED_AMLOGIC_RECOVERY_TARGET :=
+endif
+
+.PHONY: amlogicrecovery
+amlogicrecovery: $(INSTALLED_AMLOGIC_RECOVERY_TARGET)
 
 ifneq ($(BOARD_NAND_SPARE_SIZE),)
 mkyaffs2_extra_flags += -s $(BOARD_NAND_SPARE_SIZE)
@@ -1049,12 +1324,44 @@ else
 $(BUILT_TARGET_FILES_PACKAGE): tool_extensions := $(TARGET_RELEASETOOLS_EXTENSIONS)
 endif
 
+ifneq ($(TARGET_AMLOGIC_KERNEL),)
+kernel_mk := $(strip $(wildcard $(TARGET_DEVICE_DIR)/Kernel.mk))
+ifneq ($(kernel_mk),)
+include $(kernel_mk)
+$(TARGET_AMLOGIC_KERNEL): $(TARGET_AMLOGIC_INT_KERNEL) $(ACP)
+	$(ACP) $(TARGET_AMLOGIC_INT_KERNEL) $(TARGET_AMLOGIC_KERNEL)
+	$(ACP) $(TARGET_AMLOGIC_INT_RECOVERY_KERNEL) $(TARGET_AMLOGIC_RECOVERY_KERNEL)
+endif
+endif
+
+.PHONY: uImages
+uImages: $(TARGET_AMLOGIC_KERNEL)
+
+.PHONY: kmenuconfig
+kmenuconfig: kernelconfig
+
+.PHONY: ksavedefconfig
+ksavedefconfig: savekernelconfig
+
+ifneq ($(TARGET_AMLOGIC_RES_PACKAGE),)
+
+INSTALLED_AML_LOGO := $(PRODUCT_OUT)/res-package.img
+$(INSTALLED_AML_LOGO): $(IMGPACK)
+	@echo
+	@echo "generate $(INSTALLED_AML_LOGO)"
+	@echo
+	$(IMGPACK) -r $(TARGET_AMLOGIC_RES_PACKAGE) $(INSTALLED_AML_LOGO)
+else
+	INSTALLED_AML_LOGO :=
+endif
+
 # Depending on the various images guarantees that the underlying
 # directories are up-to-date.
 $(BUILT_TARGET_FILES_PACKAGE): \
 		$(INSTALLED_BOOTIMAGE_TARGET) \
 		$(INSTALLED_RADIOIMAGE_TARGET) \
 		$(INSTALLED_RECOVERYIMAGE_TARGET) \
+		$(INSTALLED_AMLOGIC_RECOVERY_TARGET) \
 		$(INSTALLED_SYSTEMIMAGE) \
 		$(INSTALLED_USERDATAIMAGE_TARGET) \
 		$(INSTALLED_CACHEIMAGE_TARGET) \
@@ -1062,7 +1369,9 @@ $(BUILT_TARGET_FILES_PACKAGE): \
 		$(built_ota_tools) \
 		$(APKCERTS_FILE) \
 		$(HOST_OUT_EXECUTABLES)/fs_config \
-		| $(ACP)
+		| $(ACP) \
+		$(INSTALLED_AML_LOGO) \
+		$(TARGET_AMLOGIC_KERNEL)
 	@echo "Package target files: $@"
 	$(hide) rm -rf $@ $(zip_root)
 	$(hide) mkdir -p $(dir $@) $(zip_root)
@@ -1072,6 +1381,9 @@ $(BUILT_TARGET_FILES_PACKAGE): \
 		$(TARGET_RECOVERY_ROOT_OUT),$(zip_root)/RECOVERY/RAMDISK)
 ifdef INSTALLED_KERNEL_TARGET
 	$(hide) $(ACP) $(INSTALLED_KERNEL_TARGET) $(zip_root)/RECOVERY/kernel
+endif
+ifdef TARGET_AMLOGIC_RECOVERY_KERNEL
+	$(hide) $(ACP) $(TARGET_AMLOGIC_RECOVERY_KERNEL) $(zip_root)/RECOVERY/kernel
 endif
 ifdef INSTALLED_2NDBOOTLOADER_TARGET
 	$(hide) $(ACP) \
@@ -1093,6 +1405,29 @@ endif
 ifdef INSTALLED_KERNEL_TARGET
 	$(hide) $(ACP) $(INSTALLED_KERNEL_TARGET) $(zip_root)/BOOT/kernel
 endif
+ifdef TARGET_AMLOGIC_KERNEL
+	$(hide) $(ACP) $(TARGET_AMLOGIC_KERNEL) $(zip_root)/BOOT/kernel
+endif
+ifdef TARGET_AMLOGIC_BOOTLOADER
+	$(hide) mkdir -p $(zip_root)/BOOTLOADER
+	$(hide) $(ACP) $(TARGET_AMLOGIC_BOOTLOADER) $(zip_root)/BOOTLOADER/bootloader
+endif
+	@# Logo resource component
+	$(hide) mkdir -p $(zip_root)/LOGO
+ifneq ($(INSTALLED_AML_LOGO),)
+	$(hide) $(ACP) $(INSTALLED_AML_LOGO) $(zip_root)/LOGO/logo
+endif
+ifdef TARGET_AMLOGIC_AML_LOGO
+	$(hide) $(ACP) $(TARGET_AMLOGIC_AML_LOGO) $(zip_root)/LOGO/aml_logo
+endif
+ifdef TARGET_AMLOGIC_RESOURCE
+	$(hide) mkdir -p $(zip_root)/SYSTEM/resource
+	$(hide) $(ACP) -rf $(TARGET_AMLOGIC_RESOURCE)/* $(zip_root)/SYSTEM/resource
+endif
+ifdef TARGET_AMLOGIC_PARAM	
+	$(hide) mkdir -p $(zip_root)/PARAM	
+	$(hide) $(ACP) -rf $(TARGET_AMLOGIC_PARAM) $(zip_root)/PARAM/param
+endif
 ifdef INSTALLED_2NDBOOTLOADER_TARGET
 	$(hide) $(ACP) \
 		$(INSTALLED_2NDBOOTLOADER_TARGET) $(zip_root)/BOOT/second
@@ -1109,6 +1444,11 @@ endif
 	$(hide) $(foreach t,$(INSTALLED_RADIOIMAGE_TARGET),\
 	            mkdir -p $(zip_root)/RADIO; \
 	            $(ACP) $(t) $(zip_root)/RADIO/$(notdir $(t));)
+	@# Components of the spi image
+ifdef TARGET_AMLOGIC_SPI
+	$(hide) mkdir -p $(zip_root)/SPI
+	$(hide) $(ACP) $(TARGET_AMLOGIC_SPI) $(zip_root)/SPI/spi
+endif
 	@# Contents of the system image
 	$(hide) $(call package_files-copy-root, \
 		$(SYSTEMIMAGE_SOURCE_DIR),$(zip_root)/SYSTEM)
@@ -1155,9 +1495,8 @@ target-files-package: $(BUILT_TARGET_FILES_PACKAGE)
 
 ifneq ($(TARGET_PRODUCT),sdk)
 ifeq ($(filter generic%,$(TARGET_DEVICE)),)
-ifneq ($(TARGET_NO_KERNEL),true)
+#ifneq ($(TARGET_NO_KERNEL),true)
 ifneq ($(recovery_fstab),)
-
 # -----------------------------------------------------------------
 # OTA update package
 
@@ -1171,15 +1510,39 @@ INTERNAL_OTA_PACKAGE_TARGET := $(PRODUCT_OUT)/$(name).zip
 
 $(INTERNAL_OTA_PACKAGE_TARGET): KEY_CERT_PAIR := $(DEFAULT_KEY_CERT_PAIR)
 
+ifeq ($(TARGET_BUILD_WIPE_USERDATA),true)
+    wipeopt := -w
+else
+    wipeopt :=
+endif # TARGET_BUILD_WIPE_USERDATA
+
+ifeq ($(TARGET_BUILD_WIPE_SYSTEM),false)
+    wipeopt += --no_wipe_system
+endif        
+
+ifneq ($(TARGET_AMLOGIC_KERNEL),)
+    amlogic_flag := --amlogic
+else
+    amlogic_flag :=
+endif
+
 $(INTERNAL_OTA_PACKAGE_TARGET): $(BUILT_TARGET_FILES_PACKAGE) $(DISTTOOLS)
 	@echo "Package OTA: $@"
-	$(hide) ./build/tools/releasetools/ota_from_target_files -v \
+	@echo ./build/tools/releasetools/ota_from_target_files -v \
+	   $(amlogic_flag) \
 	   -p $(HOST_OUT) \
+	   $(wipeopt) \
+	   -k $(KEY_CERT_PAIR) \
+	   $(BUILT_TARGET_FILES_PACKAGE) $@
+	$(hide) ./build/tools/releasetools/ota_from_target_files -v \
+	   $(amlogic_flag) \
+	   -p $(HOST_OUT) \
+	   $(wipeopt) \
 	   -k $(KEY_CERT_PAIR) \
 	   $(BUILT_TARGET_FILES_PACKAGE) $@
 
 .PHONY: otapackage
-otapackage: $(INTERNAL_OTA_PACKAGE_TARGET)
+otapackage:droidcore dist_files $(INTERNAL_OTA_PACKAGE_TARGET)
 
 # -----------------------------------------------------------------
 # The update package
@@ -1201,6 +1564,10 @@ endif
 
 $(INTERNAL_UPDATE_PACKAGE_TARGET): $(BUILT_TARGET_FILES_PACKAGE) $(DISTTOOLS)
 	@echo "Package: $@"
+	@echo ./build/tools/releasetools/img_from_target_files -v \
+	   -s $(extensions) \
+	   -p $(HOST_OUT) \
+	   $(BUILT_TARGET_FILES_PACKAGE) $@
 	$(hide) ./build/tools/releasetools/img_from_target_files -v \
 	   -s $(extensions) \
 	   -p $(HOST_OUT) \
@@ -1210,7 +1577,7 @@ $(INTERNAL_UPDATE_PACKAGE_TARGET): $(BUILT_TARGET_FILES_PACKAGE) $(DISTTOOLS)
 updatepackage: $(INTERNAL_UPDATE_PACKAGE_TARGET)
 
 endif    # recovery_fstab is defined
-endif    # TARGET_NO_KERNEL != true
+#endif    # TARGET_NO_KERNEL != true
 endif    # TARGET_DEVICE != generic*
 endif    # TARGET_PRODUCT != sdk
 

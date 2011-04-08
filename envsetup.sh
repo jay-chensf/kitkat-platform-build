@@ -437,7 +437,12 @@ function print_lunch_menu()
     local choice
     for choice in ${LUNCH_MENU_CHOICES[@]}
     do
-        echo "     $i. $choice"
+        if command -v printf &> /dev/null
+        then
+            printf "     %2i. %s\n" $i $choice
+        else
+            echo "     $i. $choice"
+        fi
         i=$(($i+1))
     done
 
@@ -617,6 +622,8 @@ function findmakefile()
     T=
     while [ \( ! \( -f $TOPFILE \) \) -a \( $PWD != "/" \) ]; do
         T=`PWD= /bin/pwd`
+        #T=$PWD
+        #T=`cd $PWD; /bin/pwd`
         if [ -f "$T/Android.mk" ]; then
             echo $T/Android.mk
             cd $HERE > /dev/null
@@ -692,6 +699,16 @@ function mmm()
             fi
         done
         ONE_SHOT_MAKEFILE="$MAKEFILE" make -C $T $DASH_ARGS $MODULES $ARGS
+    else
+        echo "Couldn't locate the top of the tree.  Try setting TOP."
+    fi
+}
+
+function mpatch()
+{
+    T=$(gettop)
+    if [ "$T" ]; then
+        $T/build/tools/releasetools/aml_update_packer $@
     else
         echo "Couldn't locate the top of the tree.  Try setting TOP."
     fi
@@ -1151,7 +1168,7 @@ if [ "x$SHELL" != "x/bin/bash" ]; then
 fi
 
 # Execute the contents of any vendorsetup.sh files we can find.
-for f in `/bin/ls vendor/*/vendorsetup.sh vendor/*/*/vendorsetup.sh device/*/*/vendorsetup.sh 2> /dev/null`
+for f in `/bin/ls vendor/*/vendorsetup.sh vendor/*/*/vendorsetup.sh device/*/vendorsetup.sh device/*/*/vendorsetup.sh 2> /dev/null`
 do
     echo "including $f"
     . $f
