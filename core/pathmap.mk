@@ -98,10 +98,11 @@ FRAMEWORKS_BASE_SUBDIRS := \
 	    keystore \
 	    icu4j \
 	    voip \
+	    ethernet \
 	 )
 
-	    #ethernet \
-	    pppoe \
+	    #pppoe \
+
 
 #
 # A version of FRAMEWORKS_BASE_SUBDIRS that is expanded to full paths from
