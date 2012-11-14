@@ -131,6 +131,25 @@ $(strip \
  )
 endef
 
+define my-topdir
+$(shell TOPFILE=build/core/envsetup.mk; \
+  if [ -f $$TOPFILE ] ; then \
+    PWD= /bin/pwd -L; \
+  else \
+    HERE=$$PWD; \
+    T=; \
+    while [ \( ! \( -f $$TOPFILE \) \) -a \( $$PWD != "/" \) ]; do \
+      cd .. > /dev/null; \
+      T=`PWD= /bin/pwd -L`; \
+    done; \
+    cd $$HERE > /dev/null; \
+    if [ -f "$$T/$$TOPFILE" ] ; then \
+      echo $$T; \
+    fi \
+  fi \
+)
+endef
+
 ###########################################################
 ## Retrieve a list of all makefiles immediately below some directory
 ###########################################################
@@ -638,6 +657,10 @@ endef
 # $(1): tag list
 define module-names-for-tag-list
 $(sort $(foreach tag,$(1),$(ALL_MODULE_NAME_TAGS.$(tag))))
+endef
+
+define module-to-install-list
+$(sort $(foreach module,$(1),$(strip $(module))))
 endef
 
 # Given an accept and reject list, find the matching
@@ -1367,6 +1390,7 @@ $(hide) $(AAPT) package $(PRIVATE_AAPT_FLAGS) -m \
     $(addprefix -A , $(PRIVATE_ASSET_DIR)) \
     $(addprefix -I , $(PRIVATE_AAPT_INCLUDES)) \
     $(addprefix -G , $(PRIVATE_PROGUARD_OPTIONS_FILE)) \
+    $(addprefix --product , $(TARGET_AAPT_CHARACTERISTICS)) \
     $(addprefix --min-sdk-version , $(PRIVATE_DEFAULT_APP_TARGET_SDK)) \
     $(addprefix --target-sdk-version , $(PRIVATE_DEFAULT_APP_TARGET_SDK)) \
     $(if $(filter --version-code,$(PRIVATE_AAPT_FLAGS)),,$(addprefix --version-code , $(PLATFORM_SDK_VERSION))) \

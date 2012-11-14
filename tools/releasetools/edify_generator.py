@@ -254,3 +254,8 @@ class EdifyGenerator(object):
       data = open(os.path.join(input_path, "updater")).read()
     common.ZipWriteStr(output_zip, "META-INF/com/google/android/update-binary",
                        data, perms=0755)
+
+  def SetBootloaderEnv(self, name, val):
+    """Set bootloader env name with val."""
+    self.script.append('set_bootloader_env("%s", "%s");' % (name, val))
+    

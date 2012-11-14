@@ -45,6 +45,8 @@ OPTIONS.tempfiles = []
 OPTIONS.device_specific = None
 OPTIONS.extras = {}
 OPTIONS.info_dict = None
+OPTIONS.amlogic = False
+OPTIONS.amlogic_ramdisk = False
 
 
 # Values for "certificate" in apkcerts that mean special things.
@@ -386,7 +388,7 @@ def SignFile(input_name, output_name, key, password, align=None,
   else:
     sign_name = output_name
 
-  cmd = ["java", "-Xmx2048m", "-jar",
+  cmd = ["java", "-Xmx1536m", "-jar",
            os.path.join(OPTIONS.search_path, "framework", "signapk.jar")]
   if whole_file:
     cmd.append("-w")
@@ -466,6 +468,9 @@ def ReadApkCerts(tf_zip):
 
 
 COMMON_DOCSTRING = """
+  -a  (--amlogic)
+      Amlogic OTA package
+
   -p  (--path)  <dir>
       Prepend <dir>/bin to the list of places to search for binaries
       run by this script, and expect to find jars in <dir>/framework.
@@ -502,8 +507,8 @@ def ParseOptions(argv,
 
   try:
     opts, args = getopt.getopt(
-        argv, "hvp:s:x:" + extra_opts,
-        ["help", "verbose", "path=", "device_specific=", "extra="] +
+        argv, "ahvp:s:x:" + extra_opts,
+        ["amlogic", "help", "verbose", "path=", "device_specific=", "extra="] +
           list(extra_long_opts))
   except getopt.GetoptError, err:
     Usage(docstring)
@@ -516,6 +521,8 @@ def ParseOptions(argv,
     if o in ("-h", "--help"):
       Usage(docstring)
       sys.exit()
+    elif o in ("-a", "--amlogic"):
+      OPTIONS.amlogic = True
     elif o in ("-v", "--verbose"):
       OPTIONS.verbose = True
     elif o in ("-p", "--path"):
@@ -866,7 +873,8 @@ def ComputeDifferences(diffs):
 
 # map recovery.fstab's fs_types to mount/format "partition types"
 PARTITION_TYPES = { "yaffs2": "MTD", "mtd": "MTD",
-                    "ext4": "EMMC", "emmc": "EMMC" }
+                    "ext4": "EMMC", "emmc": "EMMC",
+                    "ubifs": "UBI"}
 
 def GetTypeAndDevice(mount_point, info):
   fstab = info["fstab"]
