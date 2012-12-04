@@ -717,7 +717,7 @@ $(INSTALLED_RECOVERYIMAGE_TARGET): $(MKBOOTFS) $(MKBOOTIMG) $(MINIGZIP) \
 ifeq ($(TARGET_RECOVERY_NO_ADBD),true)
 	rm -f $(TARGET_RECOVERY_ROOT_OUT)/sbin/adbd
 endif
-ifeq ($(TARGET_RECOVERY_NO_MALI),true)
+ifneq ($(TARGET_RECOVERY_NO_MALI),false)
 	rm -f $(TARGET_RECOVERY_ROOT_OUT)/boot/mali.ko
 	rm -f $(TARGET_RECOVERY_ROOT_OUT)/boot/ump.ko
 endif	
@@ -904,7 +904,7 @@ $(INSTALLED_AMLOGIC_RECOVERY_TARGET): $(MKBOOTFS) $(MKBOOTIMG) $(MINIGZIP) \
 ifeq ($(TARGET_RECOVERY_NO_ADBD),true)
 	rm -f $(TARGET_RECOVERY_ROOT_OUT)/sbin/adbd
 endif
-ifeq ($(TARGET_RECOVERY_NO_MALI),true)
+ifneq ($(TARGET_RECOVERY_NO_MALI),false)
 	rm -f $(TARGET_RECOVERY_ROOT_OUT)/boot/mali.ko
 	rm -f $(TARGET_RECOVERY_ROOT_OUT)/boot/ump.ko
 endif
