@@ -108,10 +108,10 @@ int main(int argc, char *argv[])
 	char *fpath_src, *fpath_dest;
 	size_t fsize_src, fsize_dest, wrote_size;
 	struct pack_header *pack_header_p;
-	char buff[4*1024*1024];
+	char	*buff = NULL;
 	char *filename;
 	char file_path[256];
-	unsigned int pos;
+	unsigned int pos = 0;
 	unsigned char nums;
 	int is_dir = 0, ret = 0;
 
@@ -120,7 +120,7 @@ int main(int argc, char *argv[])
 		printf("invalid arguments\n");
 		exit(-1);
 	}
-	
+	buff = (char*)malloc(16*1024*1024);
 	memset(buff, 0 ,sizeof(buff));
 
 	fpath_dest = argv[argc-1];
@@ -136,6 +136,15 @@ int main(int argc, char *argv[])
 		{
 			case 'd':
 			{
+				fpath_src = argv[2];
+				f_src = fopen(fpath_src, "rb");
+				
+				if(f_src == (FILE *)NULL)
+				{
+					printf("%s: %s\n", fpath_src, strerror(errno));
+				}
+				
+				fsize_src = get_filesize(fpath_src);
 				fread((void *)buff, 1, fsize_src, f_src);
 				pos = 0;
 				while(1)
@@ -148,11 +157,14 @@ int main(int argc, char *argv[])
 						goto finish;
 					}
 
-					f_dest = fopen(pack_header_p->name, "wb+");
+					sprintf(file_path, "%s%s", argv[3], pack_header_p->name);
+					
+					f_dest = fopen(file_path, "wb+");
 					if(f_dest == (FILE *)NULL)
 					{
+						printf("=========error========\n");
 						printf("%s: %s\n", pack_header_p->name, strerror(errno));
-					}
+					} 
 
 					pos += sizeof(struct pack_header);
 					wrote_size = pack_header_p->size;
@@ -175,6 +187,8 @@ int main(int argc, char *argv[])
 						pos = pack_header_p->next;
 					}
 				}
+				fclose(f_src);
+				f_src = NULL;
 				break;
 			}
 			case 'r':
@@ -198,7 +212,8 @@ int main(int argc, char *argv[])
 	    d = opendir(fpath_src);
 	    if(d == 0) {
 	        fprintf(stderr, "opendir failed, %s\n", strerror(errno));
-	        return -1;
+	        ret = -1;
+			goto finish;
 	    }
 		i = 0;
 	    while((de = readdir(d)) != 0){
@@ -306,6 +321,10 @@ finish:
 	{
 		fclose(f_dest);
 	}
-
+	if(buff == NULL)
+	{
+		free(buff);
+		buff = NULL;
+	}
 	exit(ret);
 }
