@@ -462,13 +462,13 @@ def main(argv):
   print "  target_product: " + target_product
   print "  user: " + user
 
-  target_files_zip_path = android_product_out + "/obj/PACKAGING/target_files_intermediates/" + \
-        target_product + "-target_files-eng." + user + ".zip"
-  if os.path.exists(target_files_zip_path) == False:
-    print "ERROR: can't find target files zip. need to have made otapackage first"
+  
+  recovery_files_tab = android_build_top + "/device/amlogic/" + target_product + "/recovery/recovery.fstab"
+  if os.path.exists(recovery_files_tab) == False:  
+    print "ERROR: can't find recovery.fstab"
     sys.exit(1);
-  target_files_zip = zipfile.ZipFile(target_files_zip_path, "r")
-  OPTIONS.info_dict = common.LoadInfoDict(target_files_zip)
+  OPTIONS.info_dict = common.LoadRecoveryFSTabFromFile(recovery_files_tab)
+  
   if OPTIONS.verbose:
     print "--- target info ---"
     common.DumpInfoDict(OPTIONS.info_dict)
@@ -492,8 +492,8 @@ def main(argv):
     if os.path.exists(filename):
       OPTIONS.files_config_path = filename
     else:
-      tmpname = android_product_out + "/obj/PACKAGING/target_files_intermediates/" + \
-            target_product + "-target_files-eng." + user + "/META/filesystem_config.txt"
+      tmpname = android_build_top + "/build/tools/releasetools/" + \
+            "default_filesystem_config.txt"
       if os.path.exists(tmpname):
         OPTIONS.files_config_path = tmpname
 
