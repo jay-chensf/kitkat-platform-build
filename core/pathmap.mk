@@ -99,6 +99,7 @@ FRAMEWORKS_BASE_SUBDIRS := \
 	    icu4j \
 	    voip \
 	    ethernet \
+	    pppoe \
 	 )
 
 	    #pppoe \
