@@ -4,12 +4,12 @@
 ####################################
 
 # TODO: replace it with device's BOOTCLASSPATH
-DEXPREOPT_BOOT_JARS := core:core-junit:bouncycastle:ext:framework:telephony-common:mms-common:android.policy:services:apache-xml
-#ifeq ($(PRODUCT_MANUFACTURER),TV)
-#DEXPREOPT_BOOT_JARS := core:core-junit:bouncycastle:ext:framework:telephony-common:mms-common:android.policy:services:apache-xml:tv
-#else
 #DEXPREOPT_BOOT_JARS := core:core-junit:bouncycastle:ext:framework:telephony-common:mms-common:android.policy:services:apache-xml
-#endif
+ifeq ($(PRODUCT_MANUFACTURER),TV)
+DEXPREOPT_BOOT_JARS := core:core-junit:bouncycastle:ext:framework:telephony-common:mms-common:android.policy:services:apache-xml:tv
+else
+DEXPREOPT_BOOT_JARS := core:core-junit:bouncycastle:ext:framework:telephony-common:mms-common:android.policy:services:apache-xml
+endif
 
 DEXPREOPT_BOOT_JARS_MODULES := $(subst :, ,$(DEXPREOPT_BOOT_JARS))
 
