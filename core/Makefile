@@ -599,6 +599,12 @@ ifneq ($(custom_open_mass_storage),)
 	open_mass_storage := $(custom_open_mass_storage)
 endif
 
+recovery_data_sh := $(call include-path-for, recovery)/etc/recovery.data.sh
+custom_recovery_data_sh := $(strip $(wildcard $(TARGET_DEVICE_DIR)/recovery/recovery.data.sh))
+ifneq ($(custom_recovery_data_sh),)
+       recovery_data_sh := $(custom_recovery_data_sh)
+endif
+
 recovery_sh := $(TARGET_OUT)/bin/sh
 custom_recovery_sh := $(strip $(wildcard $(TARGET_DEVICE_DIR)/recovery/sh))
 ifneq ($(custom_recovery_sh),)
@@ -725,6 +731,7 @@ endif
 	$(hide) rm -f $(TARGET_RECOVERY_ROOT_OUT)/init*.rc
 	$(hide) cp -f $(recovery_initrc) $(TARGET_RECOVERY_ROOT_OUT)/
 	cp -f $(open_mass_storage) $(TARGET_RECOVERY_ROOT_OUT)/sbin/	
+	cp -f $(recovery_data_sh) $(TARGET_RECOVERY_ROOT_OUT)/sbin/
 	$(hide) cp -f $(recovery_binary) $(TARGET_RECOVERY_ROOT_OUT)/sbin/
 	$(hide) cp -rf $(recovery_resources_common) $(TARGET_RECOVERY_ROOT_OUT)/
 	$(hide) $(foreach item,$(recovery_resources_private), \
@@ -801,6 +808,12 @@ open_mass_storage := $(call include-path-for, recovery)/etc/open_mass_storage.sh
 custom_open_mass_storage := $(strip $(wildcard $(TARGET_DEVICE_DIR)/recovery/open_mass_storage.sh))
 ifneq ($(custom_open_mass_storage),)
 	open_mass_storage := $(custom_open_mass_storage)
+endif
+
+recovery_data_sh := $(call include-path-for, recovery)/etc/recovery.data.sh
+custom_recovery_data_sh := $(strip $(wildcard $(TARGET_DEVICE_DIR)/recovery/recovery.data.sh))
+ifneq ($(custom_recovery_data_sh),)
+       recovery_data_sh := $(custom_recovery_data_sh)
 endif
 
 recovery_sh := $(TARGET_OUT)/bin/sh
@@ -910,6 +923,7 @@ endif
 	echo Modifying ramdisk contents...
 	cp -f $(recovery_initrc) $(TARGET_RECOVERY_ROOT_OUT)/
 	cp -f $(open_mass_storage) $(TARGET_RECOVERY_ROOT_OUT)/sbin/
+	cp -f $(recovery_data_sh) $(TARGET_RECOVERY_ROOT_OUT)/sbin/
 	cp -f $(recovery_binary) $(TARGET_RECOVERY_ROOT_OUT)/sbin/
 	cp -rf $(recovery_resources_common) $(TARGET_RECOVERY_ROOT_OUT)/
 	$(foreach item,$(recovery_resources_private), \
