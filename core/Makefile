@@ -978,6 +978,13 @@ endif
 .PHONY: amlogicrecovery
 amlogicrecovery: $(INSTALLED_AMLOGIC_RECOVERY_TARGET)
 
+ifneq ($(BOARD_NAND_PAGE_SIZE),)
+mkyaffs2_extra_flags := -c $(BOARD_NAND_PAGE_SIZE)
+else
+mkyaffs2_extra_flags :=
+BOARD_NAND_PAGE_SIZE := 2048
+endif
+
 ifneq ($(BOARD_NAND_SPARE_SIZE),)
 mkyaffs2_extra_flags += -s $(BOARD_NAND_SPARE_SIZE)
 else
