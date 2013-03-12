@@ -57,10 +57,17 @@ ifeq ($(strip $(LOCAL_MANIFEST_FILE)),)
 LOCAL_MANIFEST_FILE := AndroidManifest.xml
 endif
 
+OVERLAY_MANIFEST_FILE := $(strip $(wildcard $(TARGET_DEVICE_DIR)/overlay/$(LOCAL_PATH)/AndroidManifest.xml))
+
 # If you need to put the MANIFEST_FILE outside of LOCAL_PATH
 # you can use FULL_MANIFEST_FILE
 ifeq ($(strip $(LOCAL_FULL_MANIFEST_FILE)),)
+ifeq ($(strip $(OVERLAY_MANIFEST_FILE)),)
 LOCAL_FULL_MANIFEST_FILE := $(LOCAL_PATH)/$(LOCAL_MANIFEST_FILE)
+else
+$(info AndroidMainfest.xml is overlay by $(OVERLAY_MANIFEST_FILE))
+LOCAL_FULL_MANIFEST_FILE := $(OVERLAY_MANIFEST_FILE)
+endif
 endif
 
 ifneq ($(strip $(LOCAL_MODULE_CLASS)),)
