@@ -90,6 +90,9 @@ OPTIONS.extra_script = None
 OPTIONS.aslr_mode = True
 OPTIONS.worker_threads = 3
 
+boot_img_exists = 0
+recovery_img_exists = 0
+
 def MostPopularKey(d, default):
   """Given a dict, return the key corresponding to the largest
   value.  Returns 'default' if the dict is empty."""
@@ -459,8 +462,6 @@ def WriteFullOTAPackage(input_zip, output_zip):
 
   CopyFirmwareFiles(input_zip, output_zip, script)
 
-  boot_img_exists = 0
-  recovery_img_exists = 0
   bootloader_img_exist = 0
   spi_img_exist = 0
 
@@ -645,6 +646,9 @@ def WriteIncrementalOTAPackage(target_zip, source_zip, output_zip):
 
   script.Mount("/system")
   script.AssertSomeFingerprint(source_fp, target_fp)
+
+  updating_boot = 0
+  updating_recovery = 0
 
   if boot_img_exists:
     source_boot = common.GetBootableImage(
