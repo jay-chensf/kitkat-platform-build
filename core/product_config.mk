@@ -214,6 +214,12 @@ _cpm_word2 :=
 current_product_makefile := $(strip $(current_product_makefile))
 all_product_makefiles := $(strip $(all_product_makefiles))
 
+#for amlogic product common makefile
+TARGET_PRODUCT_DIR := $(patsubst %/,%,$(dir $(current_product_makefile)))
+ifeq (,$(TARGET_PRODUCT_DIR))
+    $(warning "TARGET_PRODUCT_DIR not found" ) 
+endif
+
 ifneq (,$(filter product-graph dump-products, $(MAKECMDGOALS)))
 # Import all product makefiles.
 $(call import-products, $(all_product_makefiles))
