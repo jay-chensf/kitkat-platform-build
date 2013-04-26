@@ -14,13 +14,15 @@
 #include <fcntl.h>
 #include <dirent.h>
 #include <sys/stat.h>
-//#include <sys/mman.h> 
-#include <sys/types.h> 
+//#include <sys/mman.h>
+#include <sys/types.h>
 //#include <linux/types.h>
 
 
 #define IH_MAGIC	0x27051956	/* Image Magic Number		*/
 #define IH_NMLEN		32	/* Image Name Length		*/
+
+
 
 
 struct pack_header{
@@ -35,7 +37,7 @@ struct pack_header{
 	unsigned char	nums;	/* CPU architecture		*/
 	unsigned char   type;	/* Image Type			*/
 	unsigned char 	comp;	/* Compression Type		*/
-	unsigned char 	name[IH_NMLEN];	/* Image Name		*/
+	char 	name[IH_NMLEN];	/* Image Name		*/
 } __attribute__ ((packed));
 
 
@@ -46,23 +48,24 @@ struct file_list{
 
 
 static size_t
-get_filesize(const char *fpath) 
-{ 
-	struct stat buf; 
-	if(stat(fpath, &buf) < 0) 
-	{ 
+get_filesize(const char *fpath)
+{
+	struct stat buf;
+	if(stat(fpath, &buf) < 0)
+	{
 		fprintf (stderr, "Can't stat %s : %s\n", fpath, strerror(errno));
-		exit (EXIT_FAILURE); 
-	} 
-	return buf.st_size; 
+		exit (EXIT_FAILURE);
+	}
+	return buf.st_size;
 }
 
-static char *
-get_filename(const char *fpath) 
-{ 
+
+static  const char *
+get_filename(const char *fpath)
+{
 #if 1
 	int i;
-	char *filename = fpath;
+	const char *filename = fpath;
 	for(i=strlen(fpath)-1; i>=0; i--)
 	{
 		if(fpath[i] == '/')
@@ -72,12 +75,13 @@ get_filename(const char *fpath)
 			break;
 		}
 	}
-	
-	return filename; 
+
+	return filename;
 #else
 	return (strrchr(fpath, '/')+1);
 #endif
 }
+
 
 int get_dir_filenums(const char *dir_path)
 {
@@ -94,237 +98,322 @@ int get_dir_filenums(const char *dir_path)
 	        if(de->d_name[0] == '.') continue;
 		count++;
 	}
-	return count;	
+    closedir(d);
+	return count;
+}
+
+
+static int img_unpack( char* path_src, char* path_dest){
+	FILE *fd_src = NULL;
+	FILE *fd_dest = NULL;
+	char *header_buff = NULL;
+	char *data_buff = NULL;
+	struct pack_header *pack_header_p;
+	char file_path[256];
+	int header_size = sizeof(struct pack_header);
+	long pos = 0;
+
+	fd_src = fopen(path_src, "rb");
+	if(NULL==fd_src){
+		fprintf(stderr, "fopen %s failed, %s\n",path_src, strerror(errno));
+		return -1;
+	}
+	header_buff = malloc(header_size);
+	if(NULL==header_buff){
+		fprintf(stderr, "malloc header_buff failed, %s\n", strerror(errno));
+		return -1;
+	}
+
+
+	do{
+		memset(header_buff, 0 ,header_size);
+
+		fseek(fd_src,pos,SEEK_SET);
+		if(fread((void *)header_buff, 1, header_size, fd_src)!=header_size){
+			fprintf(stderr,"short read(%d) reading from %s (%s)\n",
+					header_size, path_src, strerror(errno));
+        	return -1;
+		}
+
+		pack_header_p = (struct pack_header*)header_buff;
+		if(pack_header_p->magic != IH_MAGIC)
+		{
+			fprintf(stderr,"%s: wrong pack img! magic == 0x%x \n", path_dest,pack_header_p->magic);
+			return  -1;
+		}
+		pos = pack_header_p->next ;
+		data_buff = malloc(pack_header_p->size);
+		if(NULL==data_buff){
+			fprintf(stderr, "malloc data_buff [%d] failed, %s\n", pack_header_p->size,strerror(errno));
+			return -1;
+		}
+		fread((void *)data_buff, 1, pack_header_p->size, fd_src);
+
+
+		sprintf(file_path, "%s/%s", path_dest, pack_header_p->name);
+
+		fd_dest = fopen(file_path, "wb+");
+		if(NULL == fd_dest)
+		{
+			fprintf(stderr,"open %s failed: %s\n", pack_header_p->name, strerror(errno));
+			return -1;
+		}
+
+		if(fwrite((void *)(data_buff), 1, pack_header_p->size, fd_dest) != pack_header_p->size)
+		{
+			fprintf(stderr,"short write(%d) writing to %s (%s)\n",
+        			pack_header_p->size, pack_header_p->name, strerror(errno));
+        	return -1;
+    	}
+		fclose(fd_dest);
+		free(data_buff);
+		fd_dest = NULL;
+		data_buff = NULL;
+	}while(pack_header_p->next!=0);
+
+	fclose(fd_src);
+
+	return 0;
+}
+
+
+static int img_pack(char* path_src,char* path_dest){
+	DIR *dir = NULL;
+	FILE *fd_src = NULL;
+	FILE *fd_dest = NULL;
+	char *data_buff = NULL;
+	struct dirent *de = NULL;
+	struct pack_header *pack_header_p = NULL;
+	int nums = 0;
+	int i = 0;
+	unsigned int pos = 0;
+	size_t fsize_src,wrote_size;
+	char file_path[256];
+	const char *filename = NULL;
+	nums = get_dir_filenums(path_src);
+	dir = opendir(path_src);
+	if(NULL == dir) {
+		fprintf(stderr, "opendir %s failed, %s\n",path_src, strerror(errno));
+		return -1;
+	}
+
+	fd_dest = fopen(path_dest, "wb+");
+	if(NULL == fd_dest)	{
+		fprintf(stderr,"open %s failed: %s\n", path_dest, strerror(errno));
+		return -1;
+	}
+
+	while((de = readdir(dir)) != 0){
+		if(de->d_name[0] == '.')
+			continue;
+		sprintf(file_path, "%s/%s", path_src, de->d_name);
+
+		filename = de->d_name;
+
+		fd_src = fopen(file_path, "rb");
+		if(NULL == fd_src){
+			fprintf(stderr,"%s: %s\n", path_dest, strerror(errno));
+			return -1;
+		}
+
+
+		fsize_src= get_filesize(file_path);
+		wrote_size = sizeof(struct pack_header) + fsize_src + 16 - (fsize_src%16);	//align 16 byte
+		data_buff = malloc(wrote_size);
+		if(NULL==data_buff){
+			fprintf(stderr, "malloc data_buff [%d] failed, %s\n", wrote_size,strerror(errno));
+			return -1;
+		}
+
+		memset(data_buff, 0, wrote_size);
+
+		pack_header_p = (struct pack_header *)data_buff;
+		pack_header_p->magic = IH_MAGIC;
+		pack_header_p->index = i;
+		pack_header_p->nums = nums;
+		pack_header_p->start = pos + sizeof(struct pack_header);
+		pack_header_p->size = fsize_src;
+		pos += wrote_size;
+
+		if(pack_header_p->index == (nums-1)){
+			pack_header_p->next = 0;
+		}else{
+			pack_header_p->next = pos;
+		}
+
+		strncpy(pack_header_p->name, filename, IH_NMLEN);
+		pack_header_p->name[IH_NMLEN-1] = 0;
+
+		fread((void *)(data_buff+sizeof(struct pack_header)), 1, fsize_src, fd_src);
+
+		if(fwrite((void *)data_buff, 1, wrote_size, fd_dest) != wrote_size)
+		{
+			printf("short write(%d) writing to %s (%s)\n",
+				wrote_size, path_dest, strerror(errno));
+			return -1;
+
+		}
+		i++;
+		free(data_buff);
+		data_buff = NULL;
+		fclose(fd_src);
+		fd_src = NULL;
+	}
+	fclose(fd_dest);
+	fd_dest = NULL;
+	closedir(dir);
+
+	return 0;
 }
 
 
 
+static int img_pack1(char** filelist,char* path_dest,int count){
+	DIR *dir = NULL;
+	FILE *fd_src = NULL;
+	FILE *fd_dest = NULL;
+	const char *path_src = NULL;
+	char *data_buff = NULL;
+	struct pack_header *pack_header_p = NULL;
 
-int main(int argc, char *argv[])
-{
-	int c, i;
-	FILE *f_src = NULL;
-	FILE *f_dest = NULL;
-	char *fpath_src, *fpath_dest;
-	size_t fsize_src, fsize_dest, wrote_size;
-	struct pack_header *pack_header_p;
-	char	*buff = NULL;
-	char *filename;
-	char file_path[256];
+	int i = 0;
 	unsigned int pos = 0;
-	unsigned char nums;
-	int is_dir = 0, ret = 0;
+	size_t fsize_src,wrote_size;
+	const char *filename = NULL;
+
+
+	fd_dest = fopen(path_dest, "wb+");
+	if(NULL == fd_dest)	{
+		fprintf(stderr,"open %s failed: %s\n", path_dest, strerror(errno));
+		return -1;
+	}
+
+	while(i < count){
+
+		path_src = *(filelist+i);
+
+		filename = get_filename(path_src);
+		printf("path_src==%s [%s]\n",path_src,*filelist);
+		fd_src = fopen(path_src, "rb");
+		if(NULL == fd_src){
+			fprintf(stderr,"%s: %s\n", path_src, strerror(errno));
+			return -1;
+		}
+
+
+		fsize_src= get_filesize(path_src);
+		wrote_size = sizeof(struct pack_header) + fsize_src + 16 - (fsize_src%16);	//align 16 byte
+		data_buff = malloc(wrote_size);
+		if(NULL==data_buff){
+			fprintf(stderr, "malloc data_buff [%d] failed, %s\n", wrote_size,strerror(errno));
+			return -1;
+		}
+
+		memset(data_buff, 0, wrote_size);
+
+		pack_header_p = (struct pack_header *)data_buff;
+		pack_header_p->magic = IH_MAGIC;
+		pack_header_p->index = i;
+		pack_header_p->nums = count;
+		pack_header_p->start = pos + sizeof(struct pack_header);
+		pack_header_p->size = fsize_src;
+		pos += wrote_size;
+
+		if(pack_header_p->index == (count-1)){
+			pack_header_p->next = 0;
+		}else{
+			pack_header_p->next = pos;
+		}
+
+		strncpy(pack_header_p->name, filename, IH_NMLEN);
+		pack_header_p->name[IH_NMLEN-1] = 0;
+
+		fread((void *)(data_buff+sizeof(struct pack_header)), 1, fsize_src, fd_src);
+
+		if(fwrite((void *)data_buff, 1, wrote_size, fd_dest) != wrote_size)
+		{
+			printf("short write(%d) writing to %s (%s)\n",
+				wrote_size, path_dest, strerror(errno));
+			return -1;
+
+		}
+		i++;
+		free(data_buff);
+		data_buff = NULL;
+		fclose(fd_src);
+		fd_src = NULL;
+	}
+	fclose(fd_dest);
+	fd_dest = NULL;
+	closedir(dir);
+
+	return 0;
+}
+
+static char *doc = "Amlogic `imgpack' usage:\n\
+\n\
+  # unpack files to the archive\n\
+  imgpack -d [archive]  [destination-directory]\n\
+  # pack files in directory to the archive\n\
+  imgpack -r [source-directory]  [archive]\n\
+  # pack files to the archive\n\
+  imgpack  [file1].. [fileN]  [archive]\n";
+
+int main(int argc, char **argv)
+{
+
+	int ret = 0;
+	int c = 0;
+	char* path_src = NULL;
+	int (*pack) (char*, char*) = NULL;
+
 
 	if(argc < 3)
 	{
 		printf("invalid arguments\n");
+		printf("%s",doc);
 		exit(-1);
 	}
-	buff = (char*)malloc(16*1024*1024);
-	memset(buff, 0 ,sizeof(buff));
 
-	fpath_dest = argv[argc-1];
-	f_dest = fopen(fpath_dest, "wb+");
-	if(f_dest == (FILE *)NULL)
-	{
-		printf("%s: %s\n", fpath_dest, strerror(errno));
-	}
-	
-	while((c = getopt(argc, argv, "d:r")) != -1)
+
+	while((c = getopt(argc, argv, "d:r:")) != -1)
 	{
 		switch(c)
 		{
 			case 'd':
-			{
-				fpath_src = argv[2];
-				f_src = fopen(fpath_src, "rb");
-				
-				if(f_src == (FILE *)NULL)
-				{
-					printf("%s: %s\n", fpath_src, strerror(errno));
+				path_src = optarg;
+				if(pack){
+					printf("%s",doc);
+					exit(-1);
 				}
-				
-				fsize_src = get_filesize(fpath_src);
-				fread((void *)buff, 1, fsize_src, f_src);
-				pos = 0;
-				while(1)
-				{
-					pack_header_p = (struct pack_header *)(buff+pos);
-					if(pack_header_p->magic != IH_MAGIC)
-					{
-						printf("%s: wrong pack img!\n", fpath_dest);
-						ret = -1;
-						goto finish;
-					}
 
-					sprintf(file_path, "%s%s", argv[3], pack_header_p->name);
-					
-					f_dest = fopen(file_path, "wb+");
-					if(f_dest == (FILE *)NULL)
-					{
-						printf("=========error========\n");
-						printf("%s: %s\n", pack_header_p->name, strerror(errno));
-					} 
-
-					pos += sizeof(struct pack_header);
-					wrote_size = pack_header_p->size;
-					if(fwrite((void *)(buff + pos), 1, wrote_size, f_dest) != wrote_size)
-					{
-	                	printf("short write(%d) writing to %s (%s)\n",
-							wrote_size, pack_header_p->name, strerror(errno));
-	                	ret = -1;
-						goto finish;
-	            	}
-
-					fclose(f_dest);
-					f_dest = NULL;
-					if(pack_header_p->next == 0)
-					{
-						break;
-					}
-					else
-					{
-						pos = pack_header_p->next;
-					}
-				}
-				fclose(f_src);
-				f_src = NULL;
+				pack = img_unpack;
 				break;
-			}
 			case 'r':
-			{
-    			is_dir = 1;
+				path_src = optarg;
+				if(pack){
+					printf("%s",doc);
+					exit(-1);
+				}
+				pack = img_pack;
 				break;
-			}
+
+			case '?':
+				pack = NULL;
+				exit(-1);
+			    break;
 			default:
-				break;
 				ret = -1;
-				goto finish;
+				break;
 		}
 	}
 
-	if(is_dir)
-	{
-		DIR *d;
-		struct dirent *de;
-		fpath_src = argv[2];
-		nums = get_dir_filenums(fpath_src);
-	    d = opendir(fpath_src);
-	    if(d == 0) {
-	        fprintf(stderr, "opendir failed, %s\n", strerror(errno));
-	        ret = -1;
-			goto finish;
-	    }
-		i = 0;
-	    while((de = readdir(d)) != 0){
-	        if (!strcmp(de->d_name, ".") || !strcmp(de->d_name, "..")) continue;
-	        if(de->d_name[0] == '.') continue;
-			sprintf(file_path, "%s/%s", fpath_src, de->d_name);
-			filename = de->d_name;
-
-			f_src = fopen(file_path, "rb");
-			if(f_dest == (FILE *)NULL)
-			{
-				printf("%s: %s\n", fpath_dest, strerror(errno));
-			}
-
-			fsize_src= get_filesize(file_path);
-			wrote_size = sizeof(struct pack_header) + fsize_src + 16 - (fsize_src%16);	//align 16 byte
-			memset(buff, 0, wrote_size);
-			
-			
-			pack_header_p = (struct pack_header *)buff;
-			pack_header_p->magic = IH_MAGIC;
-			pack_header_p->index = i;
-			pack_header_p->nums = nums;
-			pack_header_p->start = pos + sizeof(struct pack_header);
-			pack_header_p->size = fsize_src;
-			pos += wrote_size;
-			if(pack_header_p->index == (nums-1))
-			{
-
-				pack_header_p->next = 0;
-			}
-			else
-			{
-				pack_header_p->next = pos;
-			}
-
-			strncpy(pack_header_p->name, filename, IH_NMLEN);
-			pack_header_p->name[IH_NMLEN-1] = 0;
-			
-			fread((void *)(buff+sizeof(struct pack_header)), 1, fsize_src, f_src);
-			
-			if(fwrite((void *)buff, 1, wrote_size, f_dest) != wrote_size)
-			{
-		    	printf("short write(%d) writing to %s (%s)\n",
-					wrote_size, fpath_dest, strerror(errno));
-		    	ret = -1;
-				goto finish;
-			}
-			i++;
-	    }
-		goto finish;
+	if(pack){
+		ret = pack(path_src,*(argv+argc-1));
+		exit(ret);
 	}
 
-	pos = 0;
-	nums = argc - 2;
-	for(i=1; i<argc-1; i++)
-	{
-		fpath_src = argv[i];
-		f_src = fopen(fpath_src, "rb");
-		if(f_dest == (FILE *)NULL)
-		{
-			printf("%s: %s\n", fpath_dest, strerror(errno));
-		}
+	ret = img_pack1(argv+1,*(argv+argc-1),argc-2);
 
-		fsize_src= get_filesize(fpath_src);
-		wrote_size = sizeof(struct pack_header) + fsize_src + 16 - (fsize_src%16);	//align 16 byte
-		memset(buff, 0, wrote_size);
-		
-		pack_header_p = (struct pack_header *)buff;
-		pack_header_p->magic = IH_MAGIC;
-		pack_header_p->index = i - 1;
-		pack_header_p->nums = nums;
-		
-		pack_header_p->start = pos + sizeof(struct pack_header);
-		pack_header_p->size = fsize_src;
-		pos += wrote_size;
-		if(pack_header_p->index == (nums-1))
-		{
-			pack_header_p->next = 0;
-		}
-		else
-		{
-			pack_header_p->next = pos;
-		}
-		filename = get_filename(fpath_src);
-		strncpy(pack_header_p->name, filename, IH_NMLEN);
-		pack_header_p->name[IH_NMLEN-1] = 0;
-
-		fread((void *)(buff+sizeof(struct pack_header)), 1, fsize_src, f_src);
-		
-		if(fwrite((void *)buff, 1, wrote_size, f_dest) != wrote_size)
-		{
-	    	printf("short write(%d) writing to %s (%s)\n",
-				wrote_size, fpath_dest, strerror(errno));
-	    	ret = -1;
-			goto finish;
-		}
-	}
-finish:
-	if(f_src)
-	{
-		fclose(f_src);
-	}
-	if(f_dest)
-	{
-		fclose(f_dest);
-	}
-	if(buff == NULL)
-	{
-		free(buff);
-		buff = NULL;
-	}
 	exit(ret);
 }
