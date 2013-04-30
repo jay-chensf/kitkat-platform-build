@@ -1,6 +1,6 @@
 # Copyright 2005 The Android Open Source Project
 #
-# Custom version of cp.
+#
 
 LOCAL_PATH:= $(call my-dir)
 include $(CLEAR_VARS)
