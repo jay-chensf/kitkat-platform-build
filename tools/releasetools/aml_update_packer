@@ -461,9 +461,14 @@ def main(argv):
   print "  android_build_top: " + android_build_top
   print "  target_product: " + target_product
   print "  user: " + user
-
   
-  recovery_files_tab = android_build_top + "/device/amlogic/" + target_product + "/recovery/recovery.fstab"
+  
+  dirlist = os.listdir(android_build_top + "/device/")
+  for dir in dirlist:
+    tmp_path = android_build_top + "/device/"+dir+"/"+target_product
+    if os.path.exists(tmp_path) == True:
+      recovery_path = tmp_path
+  recovery_files_tab = recovery_path + "/recovery/recovery.fstab"
   if os.path.exists(recovery_files_tab) == False:  
     print "ERROR: can't find recovery.fstab"
     sys.exit(1);
