@@ -104,7 +104,12 @@ FRAMEWORKS_BASE_SUBDIRS := \
 
 	    #pppoe \
 
-
+ifdef DOLBY_DAP
+FRAMEWORKS_BASE_SUBDIRS += \
+        $(addsuffix /java, \
+            dolby \
+        )
+endif #DOLBY_DAP END
 #
 # A version of FRAMEWORKS_BASE_SUBDIRS that is expanded to full paths from
 # the root of the tree.  This currently needs to be here so that other libraries

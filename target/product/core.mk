@@ -132,6 +132,29 @@ PRODUCT_PACKAGES += \
     zoneinfo.dat \
     zoneinfo.idx \
     zoneinfo.version
+ifdef DOLBY_DAP
+    PRODUCT_PACKAGES += \
+        Ds \
+        framework_ext
+    ifdef DOLBY_DAP_NOCONSUMERAPP
+    else
+        PRODUCT_PACKAGES += \
+            DsUI
+    endif
+    ifdef DOLBY_DAP_OPENSLES
+        PRODUCT_PACKAGES += \
+            libdseffect
+    else ifdef DOLBY_DAP_DSP
+        PRODUCT_PACKAGES += \
+            libds_jni \
+            libds_native \
+            libalsa-intf
+    endif
+endif #DOLBY_DAP
+ifdef DOLBY_UDC
+    PRODUCT_PACKAGES += \
+        libstagefright_soft_ddpdec
+endif #DOLBY_UDC
 
 PRODUCT_COPY_FILES += \
     system/core/rootdir/init.usb.rc:root/init.usb.rc \

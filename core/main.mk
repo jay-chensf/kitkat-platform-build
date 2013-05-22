@@ -1,5 +1,16 @@
 # Only use ANDROID_BUILD_SHELL to wrap around bash.
 # DO NOT use other shells such as zsh.
+
+#AMLOGIC_DS_EFFECT:=true
+
+ifdef   AMLOGIC_DS_EFFECT
+         DOLBY_DAP:=true
+         DOLBY_DAP_OPENSLES:=true
+         DOLBY_UDC:=true
+         DOLBY_UDC_MULTICHANNEL:=true
+         DOLBY_DAP_OPENSLES_LPA:=true
+endif
+
 ifdef ANDROID_BUILD_SHELL
 SHELL := $(ANDROID_BUILD_SHELL)
 else
