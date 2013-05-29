@@ -474,6 +474,7 @@ system/usr/keylayout/Vendor_045e_Product_028e.kl 0 0 644
 system/usr/keylayout/Vendor_046d_Product_c532.kl 0 0 644
 system/usr/keylayout/qwerty.kl 0 0 644
 system/usr/keylayout/Vendor_0001_Product_0001.kl 0 0 644
+system/usr/keylayout/Vendor_1b8e_Product_0cec_Version_0001.kl 0 0 644
 system/usr/idc 0 0 755
 system/usr/idc/Vendor_dead_Product_beef.idc 0 0 644
 system/usr/idc/ssd253x-ts.idc 0 0 644
