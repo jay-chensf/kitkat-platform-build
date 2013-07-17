@@ -3,10 +3,11 @@
 
 #AMLOGIC_DS_EFFECT:=true
 
+DOLBY_UDC:=true
+
 ifdef   AMLOGIC_DS_EFFECT
          DOLBY_DAP:=true
          DOLBY_DAP_OPENSLES:=true
-         DOLBY_UDC:=true
          DOLBY_UDC_MULTICHANNEL:=true
          DOLBY_DAP_OPENSLES_LPA:=true
 endif
