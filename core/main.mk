@@ -793,6 +793,30 @@ ifeq ($(BUILD_TINY_ANDROID), true)
 INSTALLED_RECOVERYIMAGE_TARGET :=
 endif
 
+ifeq ($(TARGET_SUPPORT_USB_BURNING_V2),true)
+INSTALLED_AML_UPGRADE_PACKAGE_TARGET := $(PRODUCT_OUT)/aml_upgrade_package.img
+
+.PHONY:aml_upgrade
+aml_upgrade:$(INSTALLED_AML_UPGRADE_PACKAGE_TARGET)
+$(INSTALLED_AML_UPGRADE_PACKAGE_TARGET):systemimage \
+        $(INSTALLED_BOOTIMAGE_TARGET) \
+        $(INSTALLED_RECOVERYIMAGE_TARGET) \
+        $(INSTALLED_USERDATAIMAGE_TARGET) \
+	$(INSTALLED_CACHEIMAGE_TARGET)
+	@echo "Package: $@"
+	@echo ./build/tools/aml_upgrade/aml_image_v2_packer -r \
+		$(TARGET_PRODUCT_DIR)/aml_upgrade_package.conf  \
+		$(PRODUCT_OUT)/ \
+		$(PRODUCT_OUT)/aml_upgrade_package.img
+	$(hide) ./build/tools/aml_upgrade/aml_image_v2_packer -r \
+                $(TARGET_PRODUCT_DIR)/aml_upgrade_package.conf  \
+                $(PRODUCT_OUT)/ \
+                $(PRODUCT_OUT)/aml_upgrade_package.img
+	@echo " $@ installed"
+else
+#none
+INSTALLED_AML_UPGRADE_PACKAGE_TARGET :=
+endif
 # Build files and then package it into the rom formats
 .PHONY: droidcore
 droidcore: files \
@@ -802,6 +826,7 @@ droidcore: files \
 	$(INSTALLED_USERDATAIMAGE_TARGET) \
 	$(INSTALLED_CACHEIMAGE_TARGET) \
 	$(INSTALLED_AMLOGIC_RECOVERY_TARGET) \
+	$(INSTALLED_AML_UPGRADE_PACKAGE_TARGET) \
 	$(INSTALLED_FILES_FILE)
 
 # dist_files only for putting your library into the dist directory with a full build.
