@@ -4,18 +4,18 @@
 ####################################
 
 # TODO: replace it with device's BOOTCLASSPATH
-#DEXPREOPT_BOOT_JARS := core:core-junit:bouncycastle:ext:framework:telephony-common:mms-common:android.policy:services:apache-xml
+#DEXPREOPT_BOOT_JARS := core:core-junit:bouncycastle:ext:framework:telephony-common:voip-common:mms-common:android.policy:services:apache-xml
 ifeq ($(PRODUCT_MANUFACTURER),TV)
 ifdef DOLBY_DAP
-DEXPREOPT_BOOT_JARS := core:core-junit:bouncycastle:ext:framework:framework_ext:telephony-common:mms-common:android.policy:services:apache-xml:tv
+DEXPREOPT_BOOT_JARS := core:core-junit:bouncycastle:ext:framework:framework_ext:telephony-common:voip-common:mms-common:android.policy:services:apache-xml:tv
 else  # DOLBY_DAP END
-DEXPREOPT_BOOT_JARS := core:core-junit:bouncycastle:ext:framework:telephony-common:mms-common:android.policy:services:apache-xml:tv
+DEXPREOPT_BOOT_JARS := core:core-junit:bouncycastle:ext:framework:telephony-common:voip-common:mms-common:android.policy:services:apache-xml:tv
 endif # LINE_ADDED_BY_DOLBY
 else
 ifdef DOLBY_DAP
-DEXPREOPT_BOOT_JARS := core:core-junit:bouncycastle:ext:framework:framework_ext:telephony-common:mms-common:android.policy:services:apache-xml
+DEXPREOPT_BOOT_JARS := core:core-junit:bouncycastle:ext:framework:framework_ext:telephony-common:voip-common:mms-common:android.policy:services:apache-xml
 else  # DOLBY_DAP END
-DEXPREOPT_BOOT_JARS := core:core-junit:bouncycastle:ext:framework:telephony-common:mms-common:android.policy:services:apache-xml
+DEXPREOPT_BOOT_JARS := core:core-junit:bouncycastle:ext:framework:telephony-common:voip-common:mms-common:android.policy:services:apache-xml
 endif # LINE_ADDED_BY_DOLBY
 endif
 
