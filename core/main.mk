@@ -789,7 +789,8 @@ $(INSTALLED_AML_UPGRADE_PACKAGE_TARGET):systemimage \
         $(INSTALLED_BOOTIMAGE_TARGET) \
         $(INSTALLED_RECOVERYIMAGE_TARGET) \
         $(INSTALLED_USERDATAIMAGE_TARGET) \
-	$(INSTALLED_CACHEIMAGE_TARGET)
+	$(INSTALLED_CACHEIMAGE_TARGET) \
+        $(TARGET_USB_BURNING_V2_DEPEND_MODULES)
 	@echo "Package: $@"
 	@echo ./build/tools/aml_upgrade/aml_image_v2_packer -r \
 		$(TARGET_PRODUCT_DIR)/aml_upgrade_package.conf  \
