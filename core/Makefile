@@ -596,11 +596,6 @@ $(hide) echo "selinux_fc=$(SELINUX_FC)" >> $(1)
 $(if $(2),$(hide) $(foreach kv,$(2),echo "$(kv)" >> $(1);))
 endef
 
-recovery_fstab := $(strip $(wildcard $(TARGET_DEVICE_DIR)/recovery/recovery.fstab))
-ifeq ($(recovery_fstab),)
-  $(info No recovery.fstab for TARGET_DEVICE $(TARGET_DEVICE))
-endif
-
 # -----------------------------------------------------------------
 # Recovery image
 
@@ -681,7 +676,7 @@ endif
 ifdef TARGET_RECOVERY_FSTAB
 recovery_fstab := $(TARGET_RECOVERY_FSTAB)
 else
-recovery_fstab := $(strip $(wildcard $(TARGET_DEVICE_DIR)/recovery.fstab))
+recovery_fstab := $(strip $(wildcard $(TARGET_DEVICE_DIR)/recovery/recovery.fstab))
 endif
 
 # Named '.dat' so we don't attempt to use imgdiff for patching it.
