@@ -189,6 +189,7 @@ $(INSTALLED_BUILD_PROP_TARGET): $(BUILDINFO_SH) $(INTERNAL_BUILD_ID_MAKEFILE) $(
 			TARGET_CPU_ABI="$(TARGET_CPU_ABI)" \
 			TARGET_CPU_ABI2="$(TARGET_CPU_ABI2)" \
 			TARGET_AAPT_CHARACTERISTICS="$(TARGET_AAPT_CHARACTERISTICS)" \
+                        TARGET_RECOVERY_HIGH_DENSITY="$(TARGET_RECOVERY_HIGH_DENSITY)" \
 	        bash $(BUILDINFO_SH) > $@
 	$(hide) if [ -f "$(system_prop_file)" ]; then \
 	          cat $(system_prop_file) >> $@; \
@@ -638,7 +639,8 @@ recovery_resources_common := $(call include-path-for, recovery)/res
 # other devices.  Note that the font selected here can be overridden
 # for a particular device by putting a font.png in its private
 # recovery resources.
-ifneq (,$(filter xxhdpi xhdpi,$(subst $(comma),$(space),$(PRODUCT_AAPT_CONFIG))))
+ifeq ($(TARGET_RECOVERY_HIGH_DENSITY), xxhdpi)
+#ifneq (,$(filter xxhdpi xhdpi,$(subst $(comma),$(space),$(PRODUCT_AAPT_CONFIG))))
 recovery_font := $(call include-path-for, recovery)/fonts/18x32.png
 else
 recovery_font := $(call include-path-for, recovery)/fonts/12x22.png
