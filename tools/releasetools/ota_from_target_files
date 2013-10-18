@@ -443,7 +443,7 @@ def WriteFullOTAPackage(input_zip, output_zip):
   device_specific.FullOTA_Assertions()
   device_specific.FullOTA_InstallBegin()
 
-  script.ShowProgress(0.5, 0)
+  script.ShowProgress(0.8, 80)
 
   if OPTIONS.wipe_user_data:
     script.FormatPartition("/data")
@@ -513,8 +513,8 @@ def WriteFullOTAPackage(input_zip, output_zip):
   if boot_img_exists:
     common.CheckSize(boot_img.data, "boot.img", OPTIONS.info_dict)
     common.ZipWriteStr(output_zip, "boot.img", boot_img.data)
-    script.ShowProgress(0.2, 0)
-    script.ShowProgress(0.2, 10)
+    #script.ShowProgress(0.2, 0)
+    script.ShowProgress(0.1, 10)
     script.WriteRawImage("/boot", "boot.img")
 
   if bootloader_img_exist:
