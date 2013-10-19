@@ -19,20 +19,21 @@
 # devices (including non-phones and non-tablets), modify
 # core_minimal.mk instead.
 
-PRODUCT_PROPERTY_OVERRIDES := \
-    ro.config.notification_sound=OnTheHunt.ogg \
-    ro.config.alarm_alert=Alarm_Classic.ogg
-
 PRODUCT_PACKAGES += \
     BasicDreams \
     Browser \
     Contacts \
-    ContactsProvider \
-    DefaultContainerService \
-    Home \
+    DocumentsUI \
+    DownloadProviderUi \
+    ExternalStorageProvider \
     KeyChain \
     PicoTts \
+    PacProcessor \
+    ProxyHandler \
     SharedStorageBackup \
+    VpnDialogs
+
+# \
     TelephonyProvider \
     UserDictionaryProvider \
     VpnDialogs \
@@ -102,8 +103,8 @@ endif #DOLBY_UDC
 
 
 # host-only dependencies
-ifeq ($(WITH_HOST_DALVIK),true)
-    PRODUCT_PACKAGES += \
+#ifeq ($(WITH_HOST_DALVIK),true)
+#    PRODUCT_PACKAGES += \
         apache-xml-hostdex \
         bouncycastle-hostdex \
         core-hostdex \
@@ -115,6 +116,6 @@ ifeq ($(WITH_HOST_DALVIK),true)
         libssl \
         libz-host \
         dalvik
-endif
+#endif
 
-$(call inherit-product, $(SRC_TARGET_DIR)/product/core_minimal.mk)
+$(call inherit-product, $(SRC_TARGET_DIR)/product/core_base.mk)

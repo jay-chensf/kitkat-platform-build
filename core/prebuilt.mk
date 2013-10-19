@@ -16,6 +16,9 @@ ifneq ($(LOCAL_PREBUILT_JAVA_LIBRARIES),)
 $(error dont use LOCAL_PREBUILT_JAVA_LIBRARIES anymore LOCAL_PATH=$(LOCAL_PATH))
 endif
 
+# Not much sense to check build prebuilts
+LOCAL_DONT_CHECK_MODULE := true
+
 ifdef LOCAL_PREBUILT_MODULE_FILE
 my_prebuilt_src_file := $(LOCAL_PREBUILT_MODULE_FILE)
 else
@@ -89,7 +92,7 @@ $(my_prefix)DEPENDENCIES_ON_SHARED_LIBRARIES += $(LOCAL_MODULE):$(LOCAL_INSTALLE
 # since we use -rpath-link which points to the built module's path.
 built_shared_libraries := \
     $(addprefix $($(my_prefix)OUT_INTERMEDIATE_LIBRARIES)/, \
-    $(addsuffix $(so_suffix), \
+    $(addsuffix $($(my_prefix)SHLIB_SUFFIX), \
         $(LOCAL_SHARED_LIBRARIES)))
 $(LOCAL_BUILT_MODULE) : $(built_shared_libraries)
 endif
