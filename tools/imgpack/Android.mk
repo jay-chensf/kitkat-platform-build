@@ -6,7 +6,7 @@ LOCAL_PATH:= $(call my-dir)
 include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES := \
-	imgpack.c
+	res_pack.cpp crc32.cpp
 
 ifeq ($(HOST_OS),cygwin)
 LOCAL_CFLAGS += -DWIN32_EXE

@@ -528,11 +528,17 @@ ifneq ($(LOCAL_ACP_UNAVAILABLE),true)
 $(LOCAL_INSTALLED_MODULE): $(LOCAL_BUILT_MODULE) | $(ACP)
 	@echo "Install: $@"
 	$(copy-file-to-new-target)
+ifdef LOCAL_DEX_PREOPT
+	$(ACP) -fp $(patsubst %.apk,%.odex,$<) $(patsubst %.apk,%.odex,$@)
+endif
 	$(PRIVATE_POST_INSTALL_CMD)
 else
 $(LOCAL_INSTALLED_MODULE): $(LOCAL_BUILT_MODULE)
 	@echo "Install: $@"
 	$(copy-file-to-target-with-cp)
+ifdef LOCAL_DEX_PREOPT
+	cp -f $(patsubst %.apk,%.odex,$<) $(patsubst %.apk,%.odex,$@)
+endif
 endif
 
 
