@@ -86,4 +86,5 @@ GRANDFATHERED_ALL_PREBUILT := \
 	ueventd.olympus.rc \
 	ueventd.stingray.rc \
 	vold.fstab \
-	wl1271.bin
+	wl1271.bin \
+	backup
