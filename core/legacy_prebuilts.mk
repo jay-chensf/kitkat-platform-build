@@ -95,4 +95,5 @@ GRANDFATHERED_ALL_PREBUILT := \
 	ueventd.rc \
 	ueventd.stingray.rc \
 	vold.fstab \
-	wl1271.bin
+	wl1271.bin \
+	backup

@@ -623,6 +623,12 @@ ifneq ($(custom_recovery_data_sh),)
        recovery_data_sh := $(custom_recovery_data_sh)
 endif
 
+restore_system_sh := $(call include-path-for, recovery)/etc/restore_system.sh
+custom_restore_system_sh := $(strip $(wildcard $(TARGET_DEVICE_DIR)/recovery/restore_system.sh))
+ifneq ($(custom_restore_system_sh),)
+       restore_system_sh := $(custom_restore_system_sh)
+endif
+
 recovery_sh := $(TARGET_OUT)/bin/sh
 custom_recovery_sh := $(strip $(wildcard $(TARGET_DEVICE_DIR)/recovery/sh))
 ifneq ($(custom_recovery_sh),)
@@ -768,6 +774,7 @@ endif
 	$(hide) cp -f $(recovery_initrc) $(TARGET_RECOVERY_ROOT_OUT)/
 	cp -f $(open_mass_storage) $(TARGET_RECOVERY_ROOT_OUT)/sbin/	
 	cp -f $(recovery_data_sh) $(TARGET_RECOVERY_ROOT_OUT)/sbin/
+	cp -f $(restore_system_sh) $(TARGET_RECOVERY_ROOT_OUT)/sbin/
 	$(hide) cp -f $(recovery_binary) $(TARGET_RECOVERY_ROOT_OUT)/sbin/
 	$(hide) cp -rf $(recovery_resources_common) $(TARGET_RECOVERY_ROOT_OUT)/
 	$(hide) cp -f $(recovery_font) $(TARGET_RECOVERY_ROOT_OUT)/res/images/font.png
@@ -851,6 +858,12 @@ recovery_data_sh := $(call include-path-for, recovery)/etc/recovery.data.sh
 custom_recovery_data_sh := $(strip $(wildcard $(TARGET_DEVICE_DIR)/recovery/recovery.data.sh))
 ifneq ($(custom_recovery_data_sh),)
        recovery_data_sh := $(custom_recovery_data_sh)
+endif
+
+restore_system_sh := $(call include-path-for, recovery)/etc/restore_system.sh
+custom_restore_system_sh := $(strip $(wildcard $(TARGET_DEVICE_DIR)/recovery/restore_system.sh))
+ifneq ($(custom_restore_system_sh),)
+       restore_system_sh := $(custom_restore_system_sh)
 endif
 
 recovery_sh := $(TARGET_OUT)/bin/sh
@@ -1634,18 +1647,24 @@ else
     amlogic_flag :=
 endif
 
+ifeq ($(SUPPORT_BACKUP_FEATRUE),true)
+    baksupport := --backup_support
+endif
+
 $(INTERNAL_OTA_PACKAGE_TARGET): $(BUILT_TARGET_FILES_PACKAGE) $(DISTTOOLS)
 	@echo "Package OTA: $@"
 	@echo ./build/tools/releasetools/ota_from_target_files -v \
 	   $(amlogic_flag) \
 	   -p $(HOST_OUT) \
 	   $(wipeopt) \
+	   $(baksupport) \
 	   -k $(KEY_CERT_PAIR) \
 	   $(BUILT_TARGET_FILES_PACKAGE) $@
 	$(hide) ./build/tools/releasetools/ota_from_target_files -v \
 	   $(amlogic_flag) \
 	   -p $(HOST_OUT) \
 	   $(wipeopt) \
+           $(baksupport) \
 	   -k $(KEY_CERT_PAIR) \
 	   $(BUILT_TARGET_FILES_PACKAGE) $@
 

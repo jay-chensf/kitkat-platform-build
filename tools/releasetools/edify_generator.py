@@ -258,4 +258,6 @@ class EdifyGenerator(object):
   def SetBootloaderEnv(self, name, val):
     """Set bootloader env name with val."""
     self.script.append('set_bootloader_env("%s", "%s");' % (name, val))
-    
+   
+  def CopyFolder(self, src_folder, dest_folder):
+    self.script.append('copy_folder("%s", "%s");' % (src_folder, dest_folder))
