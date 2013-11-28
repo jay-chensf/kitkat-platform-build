@@ -446,6 +446,15 @@ def WriteFullOTAPackage(input_zip, output_zip):
 
   script.ShowProgress(0.8, 80)
 
+  platform = GetBuildProp("ro.board.platform", OPTIONS.info_dict)
+  print "ro.board.platform: %s" % (platform)
+  if "meson3" in platform:
+    script.SetBootloaderEnv("upgrade_step", "0")
+  elif "meson6" in platform:
+    script.SetBootloaderEnv("upgrade_step", "0")
+  else:
+    script.SetBootloaderEnv("upgrade_step", "3")
+
   if OPTIONS.wipe_user_data:
     script.FormatPartition("/data")
 
