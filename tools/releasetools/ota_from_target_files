@@ -89,6 +89,7 @@ OPTIONS.omit_prereq = False
 OPTIONS.extra_script = None
 OPTIONS.aslr_mode = True
 OPTIONS.worker_threads = 3
+OPTIONS.backup_support = False
 
 boot_img_exists = 0
 recovery_img_exists = 0
@@ -458,6 +459,15 @@ def WriteFullOTAPackage(input_zip, output_zip):
 
   script.ShowProgress(0.8, 80)
 
+  platform = GetBuildProp("ro.board.platform", OPTIONS.info_dict)
+  print "ro.board.platform: %s" % (platform)
+  if "meson3" in platform:
+    script.SetBootloaderEnv("upgrade_step", "0")
+  elif "meson6" in platform:
+    script.SetBootloaderEnv("upgrade_step", "0")
+  else:
+    script.SetBootloaderEnv("upgrade_step", "3")
+
   if OPTIONS.wipe_user_data:
     script.FormatPartition("/data")
 
@@ -466,6 +476,8 @@ def WriteFullOTAPackage(input_zip, output_zip):
 
   if not OPTIONS.no_wipe_system:
     script.FormatPartition("/system")
+    if OPTIONS.backup_support:
+      script.FormatPartition("/backup")
   script.Mount("/system")
   script.UnpackPackageDir("recovery", "/system")
   script.UnpackPackageDir("system", "/system")
@@ -520,6 +532,11 @@ def WriteFullOTAPackage(input_zip, output_zip):
 
   Item.GetMetadata(input_zip)
   Item.Get("system").SetPermissions(script)
+
+#backup system partation
+  if OPTIONS.backup_support:
+    script.Mount("/backup")
+    script.CopyFolder("/system", "/backup") 
 
   script.UnmountAll()
 
@@ -857,6 +874,11 @@ def WriteIncrementalOTAPackage(target_zip, source_zip, output_zip):
     script.ApplyPatch("/"+fn, "-", tf.size, tf.sha1, sf.sha1, "patch/"+fn+".p")
   script.SetPermissions("/system/build.prop", 0, 0, 0644, None, None)
 
+#backup system partation
+  if OPTIONS.backup_support:
+    script.Mount("/backup")
+    script.CopyFolder("/system", "/backup")
+
   script.AddToZip(target_zip, output_zip)
   WriteMetadata(metadata, output_zip)
 
@@ -885,6 +907,8 @@ def main(argv):
         OPTIONS.aslr_mode = False
     elif o in ("--worker_threads"):
       OPTIONS.worker_threads = int(a)
+    elif o in ("--backup_support"):
+      OPTIONS.backup_support = True
     else:
       return False
     return True
@@ -900,6 +924,7 @@ def main(argv):
                                               "extra_script=",
                                               "worker_threads=",
                                               "aslr_mode=",
+					      "backup_support",
                                               ],
                              extra_option_handler=option_handler)
 

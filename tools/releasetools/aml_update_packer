@@ -84,7 +84,7 @@ OPTIONS.wipe_user_data = False
 OPTIONS.files_config_path = None
 OPTIONS.package_key = None
 OPTIONS.updater_path = None
-
+OPTIONS.backup_support = False
 
 def MostPopularKey(d, default):
   """Given a dict, return the key corresponding to the largest
@@ -421,6 +421,11 @@ def WriteFullOTAPackage(input_dir, output_zip, update_path, files_config_path):
 
   script.ShowProgress(0.1, 0)
 
+#backup system partation
+  if OPTIONS.backup_support:
+    script.Mount("/backup")
+    script.CopyFolder("/system", "/backup")
+
   script.UnmountAll()
   script.AddToZip("", output_zip, update_path)
 
@@ -435,6 +440,8 @@ def main(argv):
       OPTIONS.updater_path = a
     elif o in ("-c", "--files_config_path"):
       OPTIONS.files_config_path = a
+    elif o in ("--backup_support"):
+      OPTIONS.backup_support = True
     else:
       return False
     return True
@@ -444,6 +451,7 @@ def main(argv):
                              extra_long_opts=["package_key=",
                                               "wipe_user_data",
                                               "updater_path=",
+					      "backup_support",
                                               "files_config_path="],
                              extra_option_handler=option_handler)
 
