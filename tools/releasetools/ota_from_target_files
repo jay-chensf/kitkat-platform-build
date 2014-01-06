@@ -544,7 +544,9 @@ def WriteFullOTAPackage(input_zip, output_zip):
     common.ZipWriteStr(output_zip, "bootloader.img", bootloader_img.data)
     script.WriteRawImage("/bootloader", "bootloader.img")
     script.SetBootloaderEnv("upgrade_step", "1")
-    
+  else:
+    script.SetBootloaderEnv("upgrade_step", "1")
+
   if spi_img_exist:
     script.FormatPartition("/ubootwhole")
     common.CheckSize(spi_img.data, "ubootwhole.img", OPTIONS.info_dict)
