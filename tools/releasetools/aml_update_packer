@@ -413,6 +413,13 @@ def WriteFullOTAPackage(input_dir, output_zip, update_path, files_config_path):
   else:
     print 'WARNING: Did not find BOOT'
 
+  if os.path.exists(input_dir+"/BOOTLOADER/bootloader"):
+    f_bootloader = open(input_dir+"/BOOTLOADER/bootloader", 'r')
+    common.ZipWriteStr(output_zip, "bootloader.img", f_bootloader.read())
+    script.ShowProgress(0.2, 0)
+    script.WriteRawImage("/ubootloader", "bootloader.img")
+    f_bootloader.close()
+
   script.ShowProgress(0.2, 10)
 
   if files_config_path is not None:
