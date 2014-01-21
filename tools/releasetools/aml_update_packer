@@ -504,7 +504,7 @@ def WritePatchOTAPackage(input_zip, input_dir, output_zip, update_path, files_co
     f_bootloader = open(input_dir+"/BOOTLOADER/bootloader", 'r')
     common.ZipWriteStr(output_zip, "bootloader.img", f_bootloader.read())
     script.ShowProgress(0.2, 0)
-    script.WriteRawImage("/ubootloader", "bootloader.img")
+    script.WriteRawImage("/bootloader", "bootloader.img")
     f_bootloader.close()
 
   script.ShowProgress(0.2, 10)
