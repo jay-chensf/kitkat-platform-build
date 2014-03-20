@@ -28,6 +28,7 @@ PRODUCT_PACKAGES += \
     bugreport \
     content \
     dhcpcd \
+    ethtool \
     dhcpcd-run-hooks \
     dnsmasq \
     framework \
