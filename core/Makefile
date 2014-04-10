@@ -1685,6 +1685,12 @@ ifeq ($(SUPPORT_BACKUP_FEATRUE),true)
     baksupport := --backup_support
 endif
 
+ifeq ($(TARGET_USE_SECURITY_MODE),true)
+    recovery_not_patch := --recovery_not_patch
+else
+    recovery_not_patch :=
+endif
+
 $(INTERNAL_OTA_PACKAGE_TARGET): $(BUILT_TARGET_FILES_PACKAGE) $(DISTTOOLS)
 	@echo "Package OTA: $@"
 	@echo ./build/tools/releasetools/ota_from_target_files -v \
@@ -1693,6 +1699,7 @@ $(INTERNAL_OTA_PACKAGE_TARGET): $(BUILT_TARGET_FILES_PACKAGE) $(DISTTOOLS)
 	   $(wipeopt) \
 	   $(baksupport) \
 	   -k $(KEY_CERT_PAIR) \
+	   $(recovery_not_patch) \
 	   $(BUILT_TARGET_FILES_PACKAGE) $@
 	$(hide) ./build/tools/releasetools/ota_from_target_files -v \
 	   $(amlogic_flag) \
@@ -1700,6 +1707,7 @@ $(INTERNAL_OTA_PACKAGE_TARGET): $(BUILT_TARGET_FILES_PACKAGE) $(DISTTOOLS)
 	   $(wipeopt) \
            $(baksupport) \
 	   -k $(KEY_CERT_PAIR) \
+	   $(recovery_not_patch) \
 	   $(BUILT_TARGET_FILES_PACKAGE) $@
 
 .PHONY: otapackage

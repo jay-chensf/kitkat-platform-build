@@ -90,6 +90,7 @@ OPTIONS.extra_script = None
 OPTIONS.aslr_mode = True
 OPTIONS.worker_threads = 3
 OPTIONS.backup_support = False
+OPTIONS.recovery_not_patch = False
 
 boot_img_exists = 0
 recovery_img_exists = 0
@@ -539,8 +540,14 @@ def WriteFullOTAPackage(input_zip, output_zip):
     except KeyError:
       print 'WARNING: No kernel found'
   
-  if boot_img_exists and recovery_img_exists:                       
-    MakeRecoveryPatch(OPTIONS.input_tmp, output_zip, recovery_img, boot_img)
+  if OPTIONS.recovery_not_patch:
+      if OPTIONS.amlogic:
+          if boot_img_exists and recovery_img_exists:                       
+              MakeRecoveryPatch(output_zip, recovery_img, boot_img)
+              
+  if not OPTIONS.recovery_not_patch:
+      if boot_img_exists and recovery_img_exists:                       
+          MakeRecoveryPatch(OPTIONS.input_tmp, output_zip, recovery_img, boot_img)
 
   try:
     bootloader_img_info = input_zip.getinfo("BOOTLOADER/bootloader")
@@ -564,6 +571,13 @@ def WriteFullOTAPackage(input_zip, output_zip):
     script.CopyFolder("/system", "/backup") 
 
   script.UnmountAll()
+
+  if OPTIONS.recovery_not_patch:
+      if not OPTIONS.amlogic:
+          if recovery_img_exists:
+              common.CheckSize(recovery_img.data, "recovery.img", OPTIONS.info_dict)
+              common.ZipWriteStr(output_zip, "recovery.img", recovery_img.data)
+              script.WriteRawImage("/recovery", "recovery.img")
 
   if boot_img_exists:
     common.CheckSize(boot_img.data, "boot.img", OPTIONS.info_dict)
@@ -960,6 +974,8 @@ def main(argv):
       OPTIONS.worker_threads = int(a)
     elif o in ("--backup_support"):
       OPTIONS.backup_support = True
+    elif o in ("--recovery_not_patch"):
+      OPTIONS.recovery_not_patch = True
     else:
       return False
     return True
@@ -976,6 +992,7 @@ def main(argv):
                                               "worker_threads=",
                                               "aslr_mode=",
 					      "backup_support",
+					      "recovery_not_patch",
                                               ],
                              extra_option_handler=option_handler)
 

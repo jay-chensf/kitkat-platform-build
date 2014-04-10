@@ -792,6 +792,12 @@ endif
 ifeq ($(TARGET_SUPPORT_USB_BURNING_V2),true)
 INSTALLED_AML_UPGRADE_PACKAGE_TARGET := $(PRODUCT_OUT)/aml_upgrade_package.img
 
+ifeq ($(TARGET_USE_SECURITY_MODE),true)
+  PACKAGE_CONFIG_FILE := $(TARGET_PRODUCT_DIR)/aml_upgrade_package_enc.conf 
+else
+  PACKAGE_CONFIG_FILE := $(TARGET_PRODUCT_DIR)/aml_upgrade_package.conf
+endif
+
 .PHONY:aml_upgrade
 aml_upgrade:$(INSTALLED_AML_UPGRADE_PACKAGE_TARGET)
 $(INSTALLED_AML_UPGRADE_PACKAGE_TARGET):systemimage \
@@ -802,11 +808,11 @@ $(INSTALLED_AML_UPGRADE_PACKAGE_TARGET):systemimage \
         $(TARGET_USB_BURNING_V2_DEPEND_MODULES)
 	@echo "Package: $@"
 	@echo ./build/tools/aml_upgrade/aml_image_v2_packer -r \
-		$(TARGET_PRODUCT_DIR)/aml_upgrade_package.conf  \
+		$(PACKAGE_CONFIG_FILE) \
 		$(PRODUCT_OUT)/ \
 		$(PRODUCT_OUT)/aml_upgrade_package.img
 	$(hide) ./build/tools/aml_upgrade/aml_image_v2_packer -r \
-                $(TARGET_PRODUCT_DIR)/aml_upgrade_package.conf  \
+                $(PACKAGE_CONFIG_FILE) \
                 $(PRODUCT_OUT)/ \
                 $(PRODUCT_OUT)/aml_upgrade_package.img
 	@echo " $@ installed"
