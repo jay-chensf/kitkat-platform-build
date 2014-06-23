@@ -21,12 +21,13 @@ typedef signed char     __s8;
 #define IH_NMLEN		32	/* Image Name Length		*/
 
 #define AML_RES_IMG_ITEM_ALIGN_SZ   16
-#define AML_RES_IMG_VERSION         0x01
 #define AML_RES_IMG_V1_MAGIC_LEN    8
 #define AML_RES_IMG_V1_MAGIC        "AML_RES!"//8 chars
 #define AML_RES_IMG_HEAD_SZ         (AML_RES_IMG_ITEM_ALIGN_SZ * 4)//64
 #define AML_RES_ITEM_HEAD_SZ        (AML_RES_IMG_ITEM_ALIGN_SZ * 4)//64
 
+#define AML_RES_IMG_VERSION_V1      (0x01)
+#define AML_RES_IMG_VERSION_V2      (0x02)
 
 #pragma pack(push, 1)
 typedef struct pack_header{
@@ -49,7 +50,7 @@ typedef struct pack_header{
 #pragma pack(push, 4)
 typedef struct {
     __u32   crc;    //crc32 value for the resouces image
-    __s32   version;//current version is 0x01
+    __s32   version;//0x01 means 'AmlResItemHead_t' attach to each item , 0x02 means all 'AmlResItemHead_t' at the head
 
     __u8    magic[AML_RES_IMG_V1_MAGIC_LEN];  //resources images magic
 
@@ -61,7 +62,6 @@ typedef struct {
 
 }AmlResImgHead_t;
 #pragma pack(pop)
-
 
 /*The Amlogic resouce image is consisted of a AmlResImgHead_t and many 
  * 
