@@ -735,7 +735,23 @@ def WriteIncrementalOTAPackage(target_zip, source_zip, output_zip):
   script.AssertSomeFingerprint(source_fp, target_fp)
 
   updating_boot = 0
+  updating_bootloader = 0
   updating_recovery = 0
+
+
+  source_bootloader = common.File("bootloader.img", source_zip.read("BOOTLOADER/bootloader"));
+  target_bootloader = common.File("bootloader.img", target_zip.read("BOOTLOADER/bootloader"));
+  updating_bootloader = (source_bootloader.data != target_bootloader.data);
+  print("%d:%s:%d:%s" %
+               (source_bootloader.size, source_bootloader.sha1,
+                target_bootloader.size, target_bootloader.sha1))
+
+  try:
+    target_zip.read("BOOT/kernel")
+    boot_img_exists = 1
+    recovery_img_exists = 1
+  except KeyError:
+    print 'WARNING: No boot_image found'
 
   if boot_img_exists:
     source_boot = common.GetBootableImage(
@@ -770,6 +786,8 @@ def WriteIncrementalOTAPackage(target_zip, source_zip, output_zip):
   total_verify_size = float(sum([i[2].size for i in patch_list]) + 1)
   if updating_boot:
     total_verify_size += source_boot.size
+  if updating_bootloader:
+    total_verify_size += target_bootloader.size
   so_far = 0
 
   for fn, tf, sf, size, patch_sha in patch_list:
@@ -777,24 +795,29 @@ def WriteIncrementalOTAPackage(target_zip, source_zip, output_zip):
     so_far += sf.size
     script.SetProgress(so_far / total_verify_size)
 
-  if updating_boot:
-    d = common.Difference(target_boot, source_boot)
-    _, _, d = d.ComputePatch()
-    print "boot      target: %d  source: %d  diff: %d" % (
-        target_boot.size, source_boot.size, len(d))
+  if updating_bootloader:
+    so_far += target_bootloader.size
+    script.SetProgress(so_far / total_verify_size)
 
-    common.ZipWriteStr(output_zip, "patch/boot.img.p", d)
+  if updating_boot:
+    #d = common.Difference(target_boot, source_boot)
+    #_, _, d = d.ComputePatch()
+    #print "boot      target: %d  source: %d  diff: %d" % (
+    #    target_boot.size, source_boot.size, len(d))
+
+    #common.ZipWriteStr(output_zip, "patch/boot.img.p", d)
 
     boot_type, boot_device = common.GetTypeAndDevice("/boot", OPTIONS.info_dict)
 
-    script.PatchCheck("%s:%s:%d:%s:%d:%s" %
+    #script.PatchCheck("%s:%s:%d:%s:%d:%s" %
+    print("update boot_img %s:%s:from %d:%s:to %d:%s" %
                       (boot_type, boot_device,
                        source_boot.size, source_boot.sha1,
                        target_boot.size, target_boot.sha1))
-    so_far += source_boot.size
+    so_far += target_boot.size
     script.SetProgress(so_far / total_verify_size)
 
-  if patch_list or updating_recovery or updating_boot:
+  if patch_list or updating_recovery or updating_boot or updating_bootloader:
     script.CacheFreeSpaceCheck(largest_source_size)
 
   device_specific.IncrementalOTA_VerifyEnd()
@@ -831,18 +854,31 @@ def WriteIncrementalOTAPackage(target_zip, source_zip, output_zip):
     so_far += tf.size
     script.SetProgress(so_far / total_patch_size)
 
+  if updating_bootloader:
+    script.Print("install booltloader image...");
+    common.ZipWriteStr(output_zip, "bootloader.img", target_bootloader.data)
+    script.WriteRawImage("/bootloader", "bootloader.img")
+    so_far += target_bootloader.size
+    script.SetProgress(so_far / total_patch_size)
+    print "bootloader image changed; including."
+  else:
+    print "bootloader image unchanged; skipping."
+
   if updating_boot:
     # Produce the boot image by applying a patch to the current
     # contents of the boot partition, and write it back to the
     # partition.
-    script.Print("Patching boot image...")
-    script.ApplyPatch("%s:%s:%d:%s:%d:%s"
-                      % (boot_type, boot_device,
-                         source_boot.size, source_boot.sha1,
-                         target_boot.size, target_boot.sha1),
-                      "-",
-                      target_boot.size, target_boot.sha1,
-                      source_boot.sha1, "patch/boot.img.p")
+    #script.Print("Patching boot image...")
+    #script.ApplyPatch("%s:%s:%d:%s:%d:%s"
+    #                  % (boot_type, boot_device,
+    #                     source_boot.size, source_boot.sha1,
+    #                     target_boot.size, target_boot.sha1),
+    #                  "-",
+    #                  target_boot.size, target_boot.sha1,
+    #                  source_boot.sha1, "patch/boot.img.p")
+    script.Print("install boot image...");
+    common.ZipWriteStr(output_zip, "boot.img", target_boot.data)
+    script.WriteRawImage("/boot", "boot.img")
     so_far += target_boot.size
     script.SetProgress(so_far / total_patch_size)
     print "boot image changed; including."
@@ -859,11 +895,20 @@ def WriteIncrementalOTAPackage(target_zip, source_zip, output_zip):
     # For older builds where recovery-resource.dat is not present, we
     # use only the boot image as the source.
 
-    MakeRecoveryPatch(OPTIONS.target_tmp, output_zip,
-                      target_recovery, target_boot)
-    script.DeleteFiles(["/system/recovery-from-boot.p",
-                        "/system/etc/install-recovery.sh"])
-    print "recovery image changed; including as patch from boot."
+    #MakeRecoveryPatch(OPTIONS.target_tmp, output_zip,
+    #                  target_recovery, target_boot)
+    #script.DeleteFiles(["/system/recovery-from-boot.p",
+    #                    "/system/etc/install-recovery.sh"])
+    #print "recovery image changed; including as patch from boot."
+    print("recovery_Image from:%d:%s: to %d:%s" %
+                      (source_recovery.size, source_recovery.sha1,
+                       target_recovery.size, target_recovery.sha1))
+    script.Print("install recovery image...");
+    common.ZipWriteStr(output_zip, "recovery.img", target_recovery.data)
+    script.WriteRawImage("/recovery", "recovery.img")
+    so_far += target_recovery.size
+    script.SetProgress(so_far / total_patch_size)
+    print "recovery image changed; including."
   else:
     print "recovery image unchanged; skipping."
 
