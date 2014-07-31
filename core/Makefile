@@ -20,7 +20,7 @@ is_tests_build := $(filter tests,$(MAKECMDGOALS))
 # src:dest pair is the first one to match the same dest"
 #$(1): the src:dest pair
 define check-product-copy-files
-$(if $(filter %.apk, $(1)),$(error \
+$(if $(filter %.apk, $(1)),$(warning \
     Prebuilt apk found in PRODUCT_COPY_FILES: $(1), use BUILD_PREBUILT instead!))
 endef
 # filter out the duplicate <source file>:<dest file> pairs.
@@ -161,7 +161,11 @@ BUILDINFO_SH := build/tools/buildinfo.sh
 ifdef TARGET_SYSTEM_PROP
 system_prop_file := $(TARGET_SYSTEM_PROP)
 else
-system_prop_file := $(wildcard $(TARGET_DEVICE_DIR)/system.prop)
+ ifdef CHINA_MOBILE_ENABLE
+ system_prop_file := $(wildcard $(TARGET_DEVICE_DIR)/system_chinamobile.prop)
+ else
+ system_prop_file := $(wildcard $(TARGET_DEVICE_DIR)/system.prop)
+ endif
 endif
 
 $(INSTALLED_BUILD_PROP_TARGET): $(BUILDINFO_SH) $(INTERNAL_BUILD_ID_MAKEFILE) $(BUILD_SYSTEM)/version_defaults.mk $(system_prop_file)
@@ -1691,10 +1695,23 @@ else
     recovery_not_patch :=
 endif
 
+ifeq ($(TARGET_BUILD_WIPE_CACHE),true)
+    wipe_cache_opt += --wipe_cache
+else
+    wipe_cache_opt :=
+endif # TARGET_BUILD_WIPE_USERDATA
+
+ifneq ($(DISABLE_BUILD_UTC_CHECK),)
+    omit_prereq_flag := -n
+else
+    omit_prereq_flag :=
+endif
+
 $(INTERNAL_OTA_PACKAGE_TARGET): $(BUILT_TARGET_FILES_PACKAGE) $(DISTTOOLS)
 	@echo "Package OTA: $@"
 	@echo ./build/tools/releasetools/ota_from_target_files -v \
 	   $(amlogic_flag) \
+	   $(omit_prereq_flag) \
 	   -p $(HOST_OUT) \
 	   $(wipeopt) \
 	   $(baksupport) \
@@ -1703,11 +1720,13 @@ $(INTERNAL_OTA_PACKAGE_TARGET): $(BUILT_TARGET_FILES_PACKAGE) $(DISTTOOLS)
 	   $(BUILT_TARGET_FILES_PACKAGE) $@
 	$(hide) ./build/tools/releasetools/ota_from_target_files -v \
 	   $(amlogic_flag) \
+	   $(omit_prereq_flag) \
 	   -p $(HOST_OUT) \
 	   $(wipeopt) \
            $(baksupport) \
 	   -k $(KEY_CERT_PAIR) \
 	   $(recovery_not_patch) \
+	   $(wipe_cache_opt) \
 	   $(BUILT_TARGET_FILES_PACKAGE) $@
 
 .PHONY: otapackage

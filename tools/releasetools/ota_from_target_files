@@ -91,6 +91,7 @@ OPTIONS.aslr_mode = True
 OPTIONS.worker_threads = 3
 OPTIONS.backup_support = False
 OPTIONS.recovery_not_patch = False
+OPTIONS.wipe_cache_enable = False
 
 boot_img_exists = 0
 recovery_img_exists = 0
@@ -594,6 +595,9 @@ def WriteFullOTAPackage(input_zip, output_zip):
   else:
     script.SetBootloaderEnv("upgrade_step", "1")
 
+  if OPTIONS.wipe_cache_enable:
+    script.WipeCacheFn("/cache","1")
+
   if spi_img_exist:
     script.FormatPartition("/ubootwhole")
     common.CheckSize(spi_img.data, "ubootwhole.img", OPTIONS.info_dict)
@@ -1010,6 +1014,8 @@ def main(argv):
       OPTIONS.omit_prereq = True
     elif o in ("-e", "--extra_script"):
       OPTIONS.extra_script = a
+    elif o in ("-c", "--wipe_cache"):
+      OPTIONS.wipe_cache_enable = True
     elif o in ("-a", "--aslr_mode"):
       if a in ("on", "On", "true", "True", "yes", "Yes"):
         OPTIONS.aslr_mode = True
@@ -1026,7 +1032,7 @@ def main(argv):
     return True
 
   args = common.ParseOptions(argv, __doc__,
-                             extra_opts="b:k:i:wsne:a:",
+                             extra_opts="b:k:i:wsneca:",
                              extra_long_opts=["board_config=",
                                               "package_key=",
                                               "incremental_from=",
@@ -1034,6 +1040,7 @@ def main(argv):
                                               "no_wipe_system",
                                               "no_prereq",
                                               "extra_script=",
+                                              "wipe_cache",
                                               "worker_threads=",
                                               "aslr_mode=",
 					      "backup_support",

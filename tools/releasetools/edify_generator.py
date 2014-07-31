@@ -294,3 +294,8 @@ class EdifyGenerator(object):
    
   def CopyFolder(self, src_folder, dest_folder):
     self.script.append('copy_folder("%s", "%s");' % (src_folder, dest_folder))
+    
+  def WipeCacheFn(self, name, val):
+    """Wipe cache after update."""
+    self.script.append('wipe_cache();')
+    
