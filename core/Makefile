@@ -1709,7 +1709,7 @@ endif
 
 $(INTERNAL_OTA_PACKAGE_TARGET): $(BUILT_TARGET_FILES_PACKAGE) $(DISTTOOLS)
 	@echo "Package OTA: $@"
-	@echo ./build/tools/releasetools/ota_from_target_files -v \
+	@echo ./build/tools/releasetools/ota_from_target_files -vn \
 	   $(amlogic_flag) \
 	   $(omit_prereq_flag) \
 	   -p $(HOST_OUT) \
@@ -1718,7 +1718,7 @@ $(INTERNAL_OTA_PACKAGE_TARGET): $(BUILT_TARGET_FILES_PACKAGE) $(DISTTOOLS)
 	   -k $(KEY_CERT_PAIR) \
 	   $(recovery_not_patch) \
 	   $(BUILT_TARGET_FILES_PACKAGE) $@
-	$(hide) ./build/tools/releasetools/ota_from_target_files -v \
+	$(hide) ./build/tools/releasetools/ota_from_target_files -vn \
 	   $(amlogic_flag) \
 	   $(omit_prereq_flag) \
 	   -p $(HOST_OUT) \
