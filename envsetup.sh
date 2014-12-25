@@ -493,16 +493,6 @@ function lunch()
     export TARGET_BUILD_APPS=
 
     local product=$(echo -n $selection | sed -e "s/-.*$//")
-    local model=$(echo -n $product | sed -e "s/^[^\.]*.//")
-    if [ "x$model" == "x" ]
-    then
-        export CUSTOM_MODEL=
-    else
-        #product=$(echo -n $product | sed -e "s/\./_/g")
-        product=$(echo -n $selection | sed -e "s/\..*$//")
-        export CUSTOM_MODEL=$model
-    fi
-
     check_product $product
     if [ $? -ne 0 ]
     then
